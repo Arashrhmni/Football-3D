@@ -1,29 +1,40 @@
-# Football 3D — Isometric 11v11 Engine
+# Football 3D — Isometric 11v11 Engine (Advanced Prototype)
 
-A lightweight, high-performance 2D football simulation using **Isometric 3D projection** and custom AI behaviors. Built from scratch using Python and Pygame.
+A high-performance 11v11 football simulation featuring **Isometric 3D projection**, autonomous agent AI, and custom humanoid animations. Built from scratch using Python and Pygame.
 
 ## 🚀 Key Technical Features
 
-### 1. Custom Isometric Projection Engine
-The game uses a mathematical transformation to map 3D world coordinates (x, y, z) onto a 2D screen plane.
-* **Verticality:** Ball physics include a `wz` (height) variable, allowing for realistic parabolic arcs, bounces, and headers.
-* **Optimization:** The pitch and stadium markings are "baked" onto a static surface during initialization to maintain a consistent **60 FPS**.
+### 1. Custom Isometric Projection & World Physics
+The engine maps a 3D coordinate system ($wx, wy, wz$) onto a 2D screen plane using trigonometric transformations.
+* **Verticality:** Ball physics include a $wz$ height variable, enabling realistic parabolic arcs for crosses, corners, and lofted shots.
+* **Expanded Environment:** A professional-grade 1260×810 pitch including a "runoff" area, full 3D goal boxes with net grid lines, and regulation markings such as penalty arcs and 6-yard boxes.
+* **Optimization:** Static stadium geometry is "baked" onto a separate surface during initialization to ensure a locked **60 FPS**.
 
-### 2. Advanced Agent AI
-* **Dynamic Positioning:** Teammates utilize "run-into-channel" logic, positioning themselves based on the ball carrier's location to create passing triangles.
-* **Goalkeeper Intelligence:** Keepers use intercept logic to track the ball's trajectory and move laterally to cut off shooting angles.
-* **Opposition Pressure:** CPU opponents use a proximity-based state machine to switch between "Halt Shape," "Press," and "Tackle" modes.
+### 2. Advanced Agent AI & Build-Up Play
+The AI has evolved from simple "ball-chasing" to a tactical systems-based approach:
+* **Build-Up Logic:** The CPU prioritizes space-aware passing triangles and forward runs over solo dribbling.
+* **Positional Defending:** Defenders actively block passing lanes and maintain a defensive line based on the ball’s position rather than just rushing the carrier.
+* **Reaction Delay System:** To simulate organic movement, players have a staggered reaction cooldown after passes or turnovers, preventing instantaneous pivots.
 
-### 3. Physics & Gameplay
-* **3D Ball Physics:** Includes gravity, ground friction, and lofted pass mechanics.
-* **Tactical Controls:** Features sprint mechanics, power-charging for shots, and defensive tackling cooldowns.
+### 3. Humanoid Animation System
+Players are modeled as multi-part 3D figures rather than simple ellipses:
+* **Procedural Animation:** Legs and arms are animated to swing in sync with movement speed.
+* **Directional Awareness:** Heads and eyes rotate to face the direction of movement or the ball.
+* **Team Identities:** Authentic **Barcelona** (Blaugrana stripes) vs. **Real Madrid** (White/Gold) kits, including team-specific goalkeeper colors.
+
+### 4. Dynamic Set-Pieces & Quality of Life
+* **Animated Set-Pieces:** Features fully animated throw-ins and corner kicks where players physically walk to the ball to perform the action.
+* **Auto-Switching:** Includes "Auto-Switch on Pass" and "Auto-Switch on Tackle" logic, ensuring the user always maintains control of the most relevant player.
 
 ## 🎮 Controls
-| Action | Key |
-| :--- | :--- |
-| **Move** | Arrow Keys / WASD |
-| **Sprint** | Z (hold) |
-| **Pass** | SPACE |
-| **Shoot** | F / Left-Shift (Hold to charge power) |
-| **Tackle** | X |
-| **Switch Player** | TAB |
+
+| Action | Key | Details |
+| :--- | :--- | :--- |
+| **Move** | Arrow Keys / WASD | 8-way directional movement |
+| **Sprint** | Z (hold) | Increases speed but reduces turn radius |
+| **Pass** | SPACE | Targeted pass to the best-positioned teammate |
+| **Cross** | C | Whip a high-arc ball into the box from wide areas |
+| **Shoot** | F / L-Shift | Hold to charge the power bar |
+| **Tackle** | X | Proximity-based defensive challenge |
+| **Switch Player**| TAB | Manual toggle to the nearest teammate |
+| **Quit** | ESC | Safe exit |

@@ -1,1093 +1,1003 @@
 """
-╔══════════════════════════════════════════════════════╗
-║         FOOTBALL 3D  —  11 vs 11  (Isometric)        ║
-╠══════════════════════════════════════════════════════╣
-║  MOVE          Arrow Keys / WASD                     ║
-║  SPRINT        Z (hold)                              ║
-║  PASS          SPACE  (to best open teammate)        ║
-║  SHOOT         F  or  Left-Shift                     ║
-║  TACKLE        X  (when defending, near opponent)    ║
-║  SWITCH        TAB  (nearest to ball)                ║
-║  QUIT          ESC                                   ║
-╚══════════════════════════════════════════════════════╝
-
-3-D isometric projection:
-  World coords  (wx, wy)  — the flat pitch plane
-  Screen coords (sx, sy)  — projected + height offset for ball arc
-
-Perspective:
-  sx = (wx - wy) * cos30  +  cx
-  sy = (wx + wy) * sin30  -  wz * vscale  +  cy
+╔══════════════════════════════════════════════════════════╗
+║    FOOTBALL 3D — Barcelona vs Real Madrid  (11v11)       ║
+╠══════════════════════════════════════════════════════════╣
+║  MOVE        Arrow Keys / WASD                           ║
+║  SPRINT      Z  (hold)                                   ║
+║  PASS        SPACE  → auto-switches to receiver          ║
+║  CROSS       C  (near byline, whips ball into box)       ║
+║  SHOOT       Hold F/Shift → release for power shot       ║
+║  TACKLE      X  (near opponent)                          ║
+║  SWITCH      TAB                                         ║
+║  QUIT        ESC  only                                   ║
+╚══════════════════════════════════════════════════════════╝
 """
 
 import pygame, math, random, sys
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  WORLD DIMENSIONS  (flat 2-D world used for all physics / AI)
-# ─────────────────────────────────────────────────────────────────────────────
-W_W   = 900          # world width  (x-axis → right)
-W_H   = 560          # world height (y-axis → down)
-W_MX  = W_W // 2
-W_MY  = W_H // 2
+# ═══════════════════════════════════════════════════════════════════
+#  WORLD DIMENSIONS
+# ═══════════════════════════════════════════════════════════════════
+W_W, W_H = 1260, 810
+W_MX, W_MY = W_W//2, W_H//2
 
-GOAL_W   = 110       # world units
-GOAL_TOP = W_MY - GOAL_W // 2
-GOAL_BOT = W_MY + GOAL_W // 2
+GOAL_W       = 145
+GOAL_TOP     = W_MY - GOAL_W//2
+GOAL_BOT     = W_MY + GOAL_W//2
+GOAL_DEPTH_W = 40
+GOAL_H_Z     = 78
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  ISO PROJECTION
-# ─────────────────────────────────────────────────────────────────────────────
-SCR_W, SCR_H = 1200, 740
+# Pitch markings
+PA_W, PA_H   = 190, 400
+SB_W, SB_H   =  62, 180
+CTR_R        =  92
 
-ISO_ANG  = math.radians(30)
-ISO_CX   = SCR_W // 2       # screen origin x
-ISO_CY   = SCR_H // 2 + 40  # screen origin y  (shifted down so pitch fits)
-ISO_SX   = math.cos(ISO_ANG) * 0.72   # x scale
-ISO_SY   = math.sin(ISO_ANG) * 0.72   # y scale
-ISO_VZ   = 1.1               # vertical (height) scale on screen
+# Outside area (run-off around pitch)
+OUT_L, OUT_T   = 90, 70      # extra space left/top
+OUT_R, OUT_B   = 90, 70      # extra space right/bottom
 
-def world_to_screen(wx, wy, wz=0.0):
-    """Convert world (x,y,z) → screen (sx,sy).  z=0 is the ground plane."""
-    sx = (wx - W_MX) * ISO_SX - (wy - W_MY) * ISO_SX + ISO_CX
-    sy = (wx - W_MX) * ISO_SY + (wy - W_MY) * ISO_SY - wz * ISO_VZ + ISO_CY
-    return int(sx), int(sy)
+# ═══════════════════════════════════════════════════════════════════
+#  ISOMETRIC PROJECTION
+# ═══════════════════════════════════════════════════════════════════
+SCR_W, SCR_H = 1280, 800
+_SC   = 0.60
+ISO_SX = math.cos(math.radians(30)) * _SC
+ISO_SY = math.sin(math.radians(30)) * _SC
+ISO_CX = SCR_W // 2
+ISO_CY = SCR_H // 2 + 55
+ISO_VZ = 1.08
 
 def w2s(wx, wy, wz=0.0):
-    return world_to_screen(wx, wy, wz)
+    sx = (wx - W_MX)*ISO_SX - (wy - W_MY)*ISO_SX + ISO_CX
+    sy = (wx - W_MX)*ISO_SY + (wy - W_MY)*ISO_SY - wz*ISO_VZ + ISO_CY
+    return int(sx), int(sy)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  CONSTANTS
-# ─────────────────────────────────────────────────────────────────────────────
-FPS            = 60
-PLAYER_R       = 13      # world-unit radius for player
-BALL_R         = 6
-PLAYER_SPD     = 3.4
-SPRINT_MULT    = 1.6
-BALL_FRIC      = 0.977
-BALL_GRAV      = 0.55    # gravity pulling wz toward 0
-PASS_SPD       = 10.0
-SHOOT_SPD      = 17.0
-CONTROL_R      = 18
-TACKLE_R       = 22
-SHOOT_POWER_MAX= 1.0
-SHOOT_POWER_MIN= 0.55
+# ═══════════════════════════════════════════════════════════════════
+#  PHYSICS CONSTANTS
+# ═══════════════════════════════════════════════════════════════════
+FPS          = 60
+PLAYER_R     = 14
+BALL_R       = 7
+PLAYER_SPD   = 3.6
+SPRINT_MULT  = 1.62
+BALL_FRIC    = 0.978
+BALL_GRAV    = 0.52
+PASS_SPD     = 11.0
+CROSS_SPD    = 13.0
+SHOOT_SPD    = 19.0
+CONTROL_R    = 21
+TACKLE_R     = 26
 
-# CPU knobs
-AI_WALK   = 1.9
-AI_JOG    = 2.6
-AI_RUN    = 3.4
-AI_PRESS  = 85
-AI_SHOOT_R= 230
-AI_TACKLE = 0.013
-AI_REACT  = 38
+# AI constants
+AI_WALK  = 1.9
+AI_JOG   = 2.75
+AI_RUN   = 3.55
+AI_REACT = 44
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  PALETTE
-# ─────────────────────────────────────────────────────────────────────────────
-C_SKY       = (120, 185, 240)
-C_GRASS_D   = (38, 130, 38)
-C_GRASS_L   = (50, 155, 50)
-C_LINE      = (255, 255, 255)
-C_WHITE     = (255, 255, 255)
-C_BLACK     = (0, 0, 0)
-C_YELLOW    = (255, 228, 0)
-C_LIME      = (170, 255, 50)
-C_GRAY      = (160, 160, 160)
-C_DGRAY     = (70, 70, 70)
-C_TEAM_A    = (30,  110, 230)    # human – blue
-C_TEAM_A2   = (15,  55,  130)
-C_TEAM_B    = (215,  35,  35)    # cpu – red
-C_TEAM_B2   = (110,  18,  18)
-C_KEEPER    = (255, 200,  0)
-C_KEEPER2   = (160, 120,  0)
-C_NET       = (200, 200, 200)
-C_SHADOW    = (0, 0, 0)
-C_BALL      = (255, 255, 255)
-C_BALL2     = (60, 60, 60)
-C_SHOOT_BAR = (255, 80, 0)
-C_PRESS_BAR = (0, 200, 255)
-C_PASS_LINE = (180, 255, 60)
+# Dead-ball states
+DB_THROW_A  = 'throw_in_A'
+DB_THROW_B  = 'throw_in_B'
+DB_GK_A     = 'goal_kick_A'
+DB_GK_B     = 'goal_kick_B'
+DB_CORNER_A = 'corner_A'
+DB_CORNER_B = 'corner_B'
+DB_KICK_A   = 'kickoff_A'
+DB_KICK_B   = 'kickoff_B'
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  FORMATION  (rel x 0→1 from own goal, rel y 0→1 top→bot)
-# ─────────────────────────────────────────────────────────────────────────────
+DB_LABELS = {
+    DB_THROW_A:  "THROW-IN → BARCELONA",
+    DB_THROW_B:  "THROW-IN → REAL MADRID",
+    DB_GK_A:     "GOAL KICK → BARCELONA",
+    DB_GK_B:     "GOAL KICK → REAL MADRID",
+    DB_CORNER_A: "CORNER → BARCELONA",
+    DB_CORNER_B: "CORNER → REAL MADRID",
+    DB_KICK_A:   "KICK OFF → BARCELONA",
+    DB_KICK_B:   "KICK OFF → REAL MADRID",
+}
+
+# ═══════════════════════════════════════════════════════════════════
+#  KIT COLOURS
+# ═══════════════════════════════════════════════════════════════════
+BAR_BLUE   = (0, 82, 170);   BAR_RED  = (165, 17, 17)
+BAR_SHORTS = (0, 82, 170);   BAR_SOCKS = (0, 82, 170)
+RMA_SHIRT  = (238,238,238);  RMA_GOLD = (198,162,0)
+RMA_SHORTS = (215,215,215);  RMA_SOCKS = (215,215,215)
+GK_A = (255,140,0);          GK_B = (40,160,60)
+SKIN_A = (222,182,142);      HAIR_A = (38,28,18)
+SKIN_B = (212,176,136);      HAIR_B = (58,44,20)
+
+# ═══════════════════════════════════════════════════════════════════
+#  FORMATION 4-3-3
+# ═══════════════════════════════════════════════════════════════════
 FORM = [
-    (0.05, 0.50),  # 0  GK
-    (0.22, 0.14),  # 1  LB
-    (0.22, 0.38),  # 2  CB
-    (0.22, 0.62),  # 3  CB
-    (0.22, 0.86),  # 4  RB
-    (0.46, 0.22),  # 5  LM
+    (0.055,0.50),  # 0  GK
+    (0.22, 0.13),  # 1  LB
+    (0.22, 0.37),  # 2  CB
+    (0.22, 0.63),  # 3  CB
+    (0.22, 0.87),  # 4  RB
+    (0.46, 0.20),  # 5  LM
     (0.46, 0.50),  # 6  CM
-    (0.46, 0.78),  # 7  RM
-    (0.70, 0.15),  # 8  LW
-    (0.70, 0.50),  # 9  ST
-    (0.70, 0.85),  # 10 RW
+    (0.46, 0.80),  # 7  RM
+    (0.72, 0.15),  # 8  LW
+    (0.72, 0.50),  # 9  ST
+    (0.72, 0.85),  # 10 RW
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-def dist2(a, b):
-    return math.hypot(a[0]-b[0], a[1]-b[1])
+# ═══════════════════════════════════════════════════════════════════
+#  HELPERS
+# ═══════════════════════════════════════════════════════════════════
+def d2(a,b): return math.hypot(a[0]-b[0], a[1]-b[1])
+def n2(vx,vy):
+    m=math.hypot(vx,vy); return (vx/m,vy/m) if m>1e-9 else (0.,0.)
+def clamp(v,lo,hi): return max(lo,min(hi,v))
+def lerpc(a,b,t): return tuple(int(a[i]+(b[i]-a[i])*t) for i in range(3))
 
-def norm2(vx, vy):
-    m = math.hypot(vx, vy)
-    return (vx/m, vy/m) if m > 1e-9 else (0.0, 0.0)
-
-def clamp(v, lo, hi):
-    return max(lo, min(hi, v))
-
-def world_clamp(wx, wy, r=PLAYER_R):
-    return clamp(wx, r, W_W-r), clamp(wy, r, W_H-r)
-
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
 #  BALL
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
 class Ball:
-    def __init__(self):
-        self.reset()
-
+    def __init__(self): self.reset()
     def reset(self):
-        self.wx  = float(W_MX)
-        self.wy  = float(W_MY)
-        self.wz  = 0.0          # height above ground
-        self.vx  = 0.0
-        self.vy  = 0.0
-        self.vz  = 0.0          # vertical velocity
-        self.owner        = None
-        self.last_toucher = None
-
-    def spd(self):
-        return math.hypot(self.vx, self.vy)
+        self.wx=float(W_MX); self.wy=float(W_MY); self.wz=0.
+        self.vx=0.; self.vy=0.; self.vz=0.
+        self.owner=None; self.last_toucher=None
+    def spd(self): return math.hypot(self.vx,self.vy)
 
     def update(self):
         if self.owner:
-            ox, oy = self.owner.wx, self.owner.wy
-            fx, fy = norm2(self.owner.fdx, self.owner.fdy)
-            self.wx = ox + fx * (PLAYER_R + BALL_R + 1)
-            self.wy = oy + fy * (PLAYER_R + BALL_R + 1)
-            self.wz  = 0.0
-            self.vx = self.vy = self.vz = 0.0
-            return
-
-        self.wx += self.vx
-        self.wy += self.vy
-        self.wz += self.vz
-
-        # Gravity
-        if self.wz > 0:
-            self.vz -= BALL_GRAV
+            fx,fy=n2(self.owner.fdx,self.owner.fdy)
+            self.wx=self.owner.wx+fx*(PLAYER_R+BALL_R+1)
+            self.wy=self.owner.wy+fy*(PLAYER_R+BALL_R+1)
+            self.wz=self.vx=self.vy=self.vz=0.; return
+        self.wx+=self.vx; self.wy+=self.vy; self.wz+=self.vz
+        if self.wz>0:
+            self.vz-=BALL_GRAV; self.vx*=0.999; self.vy*=0.999
         else:
-            self.wz  = 0.0
-            self.vz  = max(0.0, self.vz)
-            if abs(self.vz) < 0.5:
-                self.vz = 0.0
-            else:
-                self.vz *= -0.35   # bounce
-
-        # Ground friction only when on ground
-        if self.wz == 0.0:
-            self.vx *= BALL_FRIC
-            self.vy *= BALL_FRIC
-            if self.spd() < 0.1:
-                self.vx = self.vy = 0.0
+            self.wz=0.
+            self.vz=abs(self.vz)*0.30 if self.vz<-0.6 else 0.
+            self.vx*=BALL_FRIC; self.vy*=BALL_FRIC
+        if self.spd()<0.08 and self.wz==0: self.vx=self.vy=0.
 
     def release(self):
         if self.owner:
-            self.vx = self.owner.vx * 0.3
-            self.vy = self.owner.vy * 0.3
-            self.owner = None
+            self.vx=self.owner.vx*0.22; self.vy=self.owner.vy*0.22
+            self.owner=None
 
-    def shoot(self, tx, ty, arc=True):
-        """Launch ball toward (tx,ty) with a parabolic arc."""
+    def kick(self,tx,ty,spd,vz_init=2.5):
         self.release()
-        dx, dy = norm2(tx - self.wx, ty - self.wy)
-        d = dist2((self.wx, self.wy), (tx, ty))
-        spd = SHOOT_SPD * clamp(0.5 + d/W_W, 0.55, 1.0)
-        self.vx = dx * spd
-        self.vy = dy * spd
-        self.vz = 8.0 if arc else 2.0   # loft
+        dx,dy=n2(tx-self.wx,ty-self.wy)
+        self.vx=dx*spd; self.vy=dy*spd; self.vz=vz_init
 
-    def pass_to(self, tx, ty):
-        self.release()
-        dx, dy = norm2(tx - self.wx, ty - self.wy)
-        self.vx = dx * PASS_SPD
-        self.vy = dy * PASS_SPD
-        self.vz = 1.5
+    def draw(self,surf):
+        gx,gy=w2s(self.wx,self.wy,0)
+        bx,by=w2s(self.wx,self.wy,self.wz)
+        sr=BALL_R
+        # Shadow
+        shw=pygame.Surface((sr*5,sr*3),pygame.SRCALPHA)
+        alp=max(15,int(110-self.wz*1.4))
+        pygame.draw.ellipse(shw,(0,0,0,alp),shw.get_rect())
+        surf.blit(shw,(gx-sr*5//2,gy-sr*3//2))
+        if self.wz>3:
+            pygame.draw.line(surf,(140,140,140),(gx,gy),(bx,by),1)
+        br=max(4,int(BALL_R*(1+self.wz*0.007)))
+        # White ball
+        pygame.draw.circle(surf,(255,255,255),(bx,by),br)
+        pygame.draw.circle(surf,(180,180,180),(bx,by),br,1)
+        # Rotating patches
+        t_ang=pygame.time.get_ticks()*0.018
+        for ang in [0,72,144,216,288]:
+            a=math.radians(ang+t_ang)
+            px=bx+int(math.cos(a)*br*0.52)
+            py=by+int(math.sin(a)*br*0.52)
+            pygame.draw.circle(surf,(55,55,55),(px,py),max(1,br//3))
 
-    def draw(self, surf):
-        # Shadow on ground
-        sx, sy  = w2s(self.wx, self.wy, 0)
-        bx, by  = w2s(self.wx, self.wy, self.wz)
-        sr = max(4, int(BALL_R * 1.1))
-        shadow_surf = pygame.Surface((sr*4, sr*2), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, (0,0,0,90), (0,0,sr*4,sr*2))
-        surf.blit(shadow_surf, (sx - sr*2, sy - sr))
-
-        # Height line
-        if self.wz > 2:
-            pygame.draw.line(surf, (160,160,160), (sx, sy), (bx, by), 1)
-
-        # Ball body
-        br = max(4, int(BALL_R * (1 + self.wz * 0.012)))
-        pygame.draw.circle(surf, C_BALL,  (bx, by), br)
-        pygame.draw.circle(surf, C_BALL2, (bx, by), br, 1)
-        pygame.draw.circle(surf, C_DGRAY, (bx-1, by-1), max(2, br//3))
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  PLAYER
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
+#  PLAYER — clean humanoid silhouette, no distracting arms
+# ═══════════════════════════════════════════════════════════════════
 class Player:
-    def __init__(self, team, num, hx, hy, is_keeper=False):
-        self.team      = team
-        self.num       = num
-        self.wx        = float(hx)
-        self.wy        = float(hy)
-        self.home_x    = float(hx)
-        self.home_y    = float(hy)
-        self.vx        = 0.0
-        self.vy        = 0.0
-        self.fdx       = 1.0 if team == 'A' else -1.0   # facing dir
-        self.fdy       = 0.0
-        self.is_keeper = is_keeper
-        self.selected  = False
-        self.react     = random.randint(0, AI_REACT)
-        # Shoot power charge
-        self.charging  = False
-        self.charge    = 0.0
-        # Tackle cooldown
-        self.tackle_cd = 0
-        # Bobbing animation
-        self.anim_t    = random.uniform(0, math.pi*2)
+    def __init__(self,team,num,hx,hy,is_keeper=False):
+        self.team=team; self.num=num
+        self.wx=float(hx); self.wy=float(hy)
+        self.home_x=float(hx); self.home_y=float(hy)
+        self.vx=0.; self.vy=0.
+        self.fdx=1. if team=='A' else -1.; self.fdy=0.
+        self.is_keeper=is_keeper; self.selected=False
+        self.react=random.randint(0,AI_REACT); self.tackle_cd=0
+        self.anim_t=random.uniform(0,math.pi*2)
+        # throw-in / corner animation
+        self.throw_anim=0   # 0=none, 1..30=raising, -1=done
+        # CPU build-up state
+        self.hold_timer=0
 
-    def move_toward(self, tx, ty, spd):
-        d = dist2((self.wx, self.wy), (tx, ty))
-        if d < 0.5:
-            return
-        r = min(spd / d, 1.0)
-        self.vx = (tx - self.wx) * r
-        self.vy = (ty - self.wy) * r
-        ln = math.hypot(self.vx, self.vy)
-        if ln > 0:
-            self.fdx = self.vx / ln
-            self.fdy = self.vy / ln
-        self.wx += self.vx
-        self.wy += self.vy
-        self.wx, self.wy = world_clamp(self.wx, self.wy)
-
-    def draw(self, surf, ball, font_small):
-        has_ball = (ball.owner is self)
-        moving   = math.hypot(self.vx, self.vy) > 0.3
-
-        # Body bob
-        if moving:
-            self.anim_t += 0.28
-        bob = math.sin(self.anim_t) * 3.0 if moving else 0.0
-
-        # Colors
-        if self.is_keeper:
-            body_col, dark_col = C_KEEPER, C_KEEPER2
-        elif self.team == 'A':
-            body_col, dark_col = C_TEAM_A, C_TEAM_A2
+    def _kit(self):
+        if self.team=='A':
+            if self.is_keeper: return GK_A,GK_A,(50,50,50),SKIN_A,HAIR_A
+            return BAR_BLUE,BAR_SHORTS,BAR_SOCKS,SKIN_A,HAIR_A
         else:
-            body_col, dark_col = C_TEAM_B, C_TEAM_B2
+            if self.is_keeper: return GK_B,(80,80,80),(80,80,80),SKIN_B,HAIR_B
+            return RMA_SHIRT,RMA_SHORTS,RMA_SOCKS,SKIN_B,HAIR_B
 
-        # Screen pos
-        sx, sy = w2s(self.wx, self.wy, 0)
-        # 3-D body at height bob
-        bsx, bsy = w2s(self.wx, self.wy, max(0, bob + 4))
+    def move_toward(self,tx,ty,spd):
+        dd=d2((self.wx,self.wy),(tx,ty))
+        if dd<0.5: self.vx=self.vy=0.; return
+        r=min(spd/dd,1.)
+        self.vx=(tx-self.wx)*r; self.vy=(ty-self.wy)*r
+        ln=math.hypot(self.vx,self.vy)
+        if ln>0: self.fdx=self.vx/ln; self.fdy=self.vy/ln
+        self.wx+=self.vx; self.wy+=self.vy
+        # Players can go into the outside area (run-off)
+        self.wx=clamp(self.wx,-OUT_L,W_W+OUT_R)
+        self.wy=clamp(self.wy,-OUT_T,W_H+OUT_B)
+
+    def draw(self,surf,ball,fnt):
+        shirt,shorts,socks,skin,hair=self._kit()
+        has_ball=(ball.owner is self)
+        moving=math.hypot(self.vx,self.vy)>0.2
+        if moving: self.anim_t+=0.28
+        bob=math.sin(self.anim_t)*3.2 if moving else 0.
+
+        gx,gy=w2s(self.wx,self.wy,0)
+        bx,by=w2s(self.wx,self.wy,max(0,bob+4))
 
         # Ground shadow
-        shw = pygame.Surface((PLAYER_R*3, PLAYER_R*2), pygame.SRCALPHA)
-        pygame.draw.ellipse(shw, (0,0,0,70), (0,0,PLAYER_R*3, PLAYER_R*2))
-        surf.blit(shw, (sx - PLAYER_R*3//2, sy - PLAYER_R))
+        shw=pygame.Surface((PLAYER_R*4,PLAYER_R*2),pygame.SRCALPHA)
+        pygame.draw.ellipse(shw,(0,0,0,60),shw.get_rect())
+        surf.blit(shw,(gx-PLAYER_R*2,gy-PLAYER_R))
 
-        # Legs (two small ellipses)
-        lleg_off = int(PLAYER_R * 0.4)
-        leg_h    = int(PLAYER_R * 0.55)
-        for sign in (-1, 1):
-            phase = self.anim_t + (0 if sign == -1 else math.pi)
-            lbob  = math.sin(phase) * 4 if moving else 0
-            lx = bsx + int(self.fdx * leg_h) + int(self.fdy * sign * lleg_off)
-            ly = bsy + int(self.fdy * leg_h) - int(self.fdx * sign * lleg_off) + int(lbob) + PLAYER_R - 2
-            pygame.draw.circle(surf, dark_col, (lx, ly), int(PLAYER_R * 0.45))
+        # ── Legs (two cylinders)
+        foot_r=max(3,int(PLAYER_R*0.40))
+        l_fwd=PLAYER_R-2
+        l_off=int(PLAYER_R*0.38)
+        for sign in(-1,1):
+            ph=self.anim_t+(0 if sign==-1 else math.pi)
+            lb=math.sin(ph)*5 if moving else 0
+            lx=bx+int(self.fdx*l_fwd)+int(self.fdy*sign*l_off)
+            ly=by+int(self.fdy*l_fwd)-int(self.fdx*sign*l_off)+PLAYER_R+int(lb)
+            # Sock stripe
+            pygame.draw.line(surf,socks,(lx,by+PLAYER_R-3),(lx,ly-foot_r+1),5)
+            # Boot
+            bcol=(25,25,25) if self.team=='A' else (210,210,210)
+            pygame.draw.circle(surf,bcol,(lx,ly),foot_r)
+            pygame.draw.circle(surf,(0,0,0),(lx,ly),foot_r,1)
 
-        # Torso (main body ellipse — wider than tall in iso)
-        tw = int(PLAYER_R * 1.55)
-        th = int(PLAYER_R * 1.9)
-        torso_rect = (bsx - tw, bsy - th, tw*2, th)
-        pygame.draw.ellipse(surf, body_col, torso_rect)
-        pygame.draw.ellipse(surf, dark_col, torso_rect, 2)
+        # ── Shorts
+        sw=int(PLAYER_R*1.25); sh=int(PLAYER_R*0.9)
+        pygame.draw.ellipse(surf,shorts,(bx-sw,by+sh//4,sw*2,sh))
 
-        # Head
-        hrad = int(PLAYER_R * 0.7)
-        head_y = bsy - th
-        pygame.draw.circle(surf, (240, 200, 160), (bsx, head_y), hrad)
-        pygame.draw.circle(surf, (180, 140, 100), (bsx, head_y), hrad, 1)
+        # ── Torso (ellipse)
+        tw=int(PLAYER_R*1.38); th=int(PLAYER_R*1.48)
+        t_y=by-th+sh//4
+        torso=(bx-tw,t_y,tw*2,th)
+        pygame.draw.ellipse(surf,shirt,torso)
 
-        # Jersey number on torso
-        ns = font_small.render(str(self.num), True, C_WHITE)
-        surf.blit(ns, (bsx - ns.get_width()//2, bsy - th + 3))
+        # Barcelona vertical stripes
+        if self.team=='A' and not self.is_keeper:
+            sw2=max(4,tw//3)
+            stripe_cols=[BAR_BLUE,BAR_RED,BAR_BLUE]
+            for si,sc in enumerate(stripe_cols):
+                rx=bx-tw+si*sw2*2
+                clip=pygame.Rect(rx,t_y,sw2*2,th)
+                inter=pygame.Rect(*torso).clip(clip)
+                if inter.w>0 and inter.h>0:
+                    sub=pygame.Surface((inter.w,inter.h),pygame.SRCALPHA)
+                    sub.fill(sc)
+                    surf.blit(sub,(inter.x,inter.y))
+            pygame.draw.ellipse(surf,tuple(max(0,c-28) for c in shirt),torso,2)
+        elif self.team=='B' and not self.is_keeper:
+            pygame.draw.ellipse(surf,RMA_SHIRT,torso)
+            pygame.draw.ellipse(surf,RMA_GOLD,torso,2)
+        else:
+            pygame.draw.ellipse(surf,tuple(max(0,c-20) for c in shirt),torso,2)
 
-        # Selection ring
+        # Jersey number
+        ns=fnt.render(str(self.num),True,
+                       (255,255,255) if self.team=='A' else (30,30,30))
+        surf.blit(ns,(bx-ns.get_width()//2,t_y+th//2-ns.get_height()//2))
+
+        # ── Arms — drawn as part of the torso silhouette, NOT floating circles
+        # Two tapered arm shapes attached to torso sides
+        arm_col=shirt
+        for sign in(-1,1):
+            arm_swing=math.sin(self.anim_t+sign*math.pi*0.5)*5 if moving else 0
+            # Shoulder point
+            sx2=bx+sign*(tw-2)
+            sy2=t_y+th//4
+            # Elbow point
+            ex2=sx2+sign*5
+            ey2=sy2+th//2+int(arm_swing*0.6)
+            # Draw arm as a thick line (foreground part of body)
+            pygame.draw.line(surf,arm_col,(sx2,sy2),(ex2,ey2),max(4,int(PLAYER_R*0.32)))
+            # Wrist/hand — skin tone dot, small and close to body
+            pygame.draw.circle(surf,skin,(ex2,ey2+3),max(3,int(PLAYER_R*0.24)))
+
+        # ── Neck
+        neck_top=t_y-1
+        pygame.draw.line(surf,skin,(bx,neck_top),(bx,neck_top-5),4)
+
+        # ── Head
+        hr=int(PLAYER_R*0.70)
+        hcy=neck_top-hr-1
+        pygame.draw.circle(surf,skin,(bx,hcy),hr)
+        pygame.draw.circle(surf,tuple(max(0,c-18) for c in skin),(bx,hcy),hr,1)
+        # Hair cap
+        pygame.draw.arc(surf,hair,
+                        (bx-hr,hcy-hr,hr*2,hr*2),
+                        math.radians(20),math.radians(160),hr)
+        # Eyes (two dots, direction-aware)
+        eo=max(2,hr//3)
+        for sg in(-1,1):
+            ex3=bx+int(self.fdx*eo*0.5)+sg*int(abs(self.fdy)*eo*0.5+max(2,hr//4))
+            ey3=hcy+2
+            pygame.draw.circle(surf,(25,25,25),(ex3,ey3),2)
+
+        # ── Throw-in animation (arms raised)
+        if self.throw_anim>0:
+            progress=min(1.,self.throw_anim/20.)
+            raise_y=int(progress*20)
+            for sign in(-1,1):
+                ax=bx+sign*(tw-2)
+                ay=t_y+th//4-raise_y
+                pygame.draw.line(surf,arm_col,(ax,t_y+th//4),(ax,ay),
+                                 max(4,int(PLAYER_R*0.32)))
+                pygame.draw.circle(surf,skin,(ax,ay),max(3,int(PLAYER_R*0.24)))
+
+        # ── Selection ring
         if self.selected:
-            t = pygame.time.get_ticks()
-            pulse = int(3 + 2*math.sin(t * 0.006))
-            pygame.draw.ellipse(surf, C_LIME,
-                (sx - PLAYER_R - pulse, sy - (PLAYER_R+pulse)//2,
-                 (PLAYER_R+pulse)*2, PLAYER_R+pulse), 2)
+            t_ms=pygame.time.get_ticks()
+            pulse=int(3+2*math.sin(t_ms*0.007))
+            rc=(0,255,100) if self.team=='A' else (255,200,0)
+            pygame.draw.ellipse(surf,rc,
+                (gx-PLAYER_R-pulse,gy-(PLAYER_R+pulse)//2,
+                 (PLAYER_R+pulse)*2,PLAYER_R+pulse),3)
 
-        # Ball possession ring
+        # Ball glow
         if has_ball:
-            pygame.draw.ellipse(surf, C_YELLOW,
-                (sx - PLAYER_R - 5, sy - (PLAYER_R+5)//2,
-                 (PLAYER_R+5)*2, PLAYER_R+5), 2)
+            pygame.draw.ellipse(surf,(255,225,0),
+                (gx-PLAYER_R-6,gy-(PLAYER_R+6)//2,(PLAYER_R+6)*2,PLAYER_R+6),2)
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
 #  GAME
-# ─────────────────────────────────────────────────────────────────────────────
-class FootballGame:
+# ═══════════════════════════════════════════════════════════════════
+class Game:
     def __init__(self):
         pygame.init()
-        self.screen  = pygame.display.set_mode((SCR_W, SCR_H))
-        pygame.display.set_caption("Football 3D — 11 vs 11")
-        self.clock   = pygame.time.Clock()
+        self.screen=pygame.display.set_mode((SCR_W,SCR_H))
+        pygame.display.set_caption("Football 3D — Barcelona vs Real Madrid")
+        self.clock=pygame.time.Clock()
+        self.f_hud=pygame.font.SysFont("Arial",13,bold=True)
+        self.f_big=pygame.font.SysFont("Georgia",38,bold=True)
+        self.f_med=pygame.font.SysFont("Georgia",24,bold=True)
+        self.f_num=pygame.font.SysFont("Arial",9,bold=True)
 
-        self.font_hud   = pygame.font.SysFont("Arial", 13, bold=True)
-        self.font_big   = pygame.font.SysFont("Georgia", 38, bold=True)
-        self.font_med   = pygame.font.SysFont("Georgia", 24, bold=True)
-        self.font_num   = pygame.font.SysFont("Arial", 9,  bold=True)
-
-        self.score      = [0, 0]
-        self.match_time = 0
-        self.messages   = []   # [text, color, ttl]
-
-        self.dead_ball       = None
-        self.dead_ball_pos   = (W_MX, W_MY)
-        self.dead_ball_timer = 0
-
-        # Shoot charge
-        self.charging        = False
-        self.charge          = 0.0
-
-        self.ball = Ball()
+        self.score=[0,0]; self.match_time=0; self.msgs=[]
+        self.dead=None; self.dead_pos=(W_MX,W_MY); self.dead_timer=0
+        self.throw_player=None  # player doing throw-in / corner animation
+        self.charging=False; self.charge=0.
+        self.ball=Ball()
         self._build_teams()
         self._kickoff('A')
+        self._pitch=pygame.Surface((SCR_W,SCR_H))
+        self._bake_pitch()
 
-        # Pre-build pitch surface once
-        self.pitch_surf = pygame.Surface((SCR_W, SCR_H), pygame.SRCALPHA)
-        self._bake_pitch(self.pitch_surf)
-
-    # ── Team setup ────────────────────────────────────────────────────────────
+    # ─── Team setup ────────────────────────────────────────────────
     def _build_teams(self):
-        self.team_a, self.team_b = [], []
-        for i, (rx, ry) in enumerate(FORM):
-            hx_a = rx * W_W * 0.47
-            hx_b = W_W - rx * W_W * 0.47
-            hy   = ry * W_H
-            self.team_a.append(Player('A', i+1, hx_a, hy, is_keeper=(i==0)))
-            self.team_b.append(Player('B', i+1, hx_b, hy, is_keeper=(i==0)))
-        self.sel = self.team_a[9]
-        self.sel.selected = True
+        self.ta,self.tb=[],[]
+        for i,(rx,ry) in enumerate(FORM):
+            hxa=rx*W_W*0.47; hxb=W_W-rx*W_W*0.47; hy=ry*W_H
+            self.ta.append(Player('A',i+1,hxa,hy,is_keeper=(i==0)))
+            self.tb.append(Player('B',i+1,hxb,hy,is_keeper=(i==0)))
+        self.sel=self.ta[9]; self.sel.selected=True
 
-    def _kickoff(self, kicking):
-        self.dead_ball = None
-        self.charging  = False
-        self.charge    = 0.0
+    def _kickoff(self,side):
+        self.dead=None; self.charging=False; self.charge=0.; self.throw_player=None
         self.ball.reset()
-        for p in self.team_a + self.team_b:
-            p.wx, p.wy = p.home_x, p.home_y
-            p.vx = p.vy = 0.0
-        kicker = self.team_a[9] if kicking == 'A' else self.team_b[9]
-        kicker.wx = float(W_MX - (10 if kicking == 'A' else -10))
-        kicker.wy = float(W_MY)
-        self.ball.owner = kicker
-        self.ball.last_toucher = kicker
+        for p in self.ta+self.tb: p.wx,p.wy=p.home_x,p.home_y; p.vx=p.vy=0.
+        k=self.ta[9] if side=='A' else self.tb[9]
+        k.wx=float(W_MX-(12 if side=='A' else -12)); k.wy=float(W_MY)
+        self.ball.owner=k; self.ball.last_toucher=k
 
-    def add_msg(self, text, col=C_WHITE):
-        self.messages.append([text, col, 210])
+    def msg(self,txt,col=(255,255,255)): self.msgs.append([txt,col,220])
 
-    # ── Pitch baking ─────────────────────────────────────────────────────────
-    def _bake_pitch(self, surf):
-        surf.fill((0, 0, 0, 0))
+    # ─── Bake pitch ────────────────────────────────────────────────
+    def _bake_pitch(self):
+        s=self._pitch
+        # Sky
+        for row in range(SCR_H):
+            t=row/SCR_H
+            pygame.draw.line(s,lerpc((95,165,225),(38,58,98),t),(0,row),(SCR_W,row))
 
-        # ── Sky gradient  (background, not part of pitch polygon)
-        for row in range(SCR_H // 2):
-            t = row / (SCR_H // 2)
-            r = int(C_SKY[0] * (1-t) + 60*t)
-            g = int(C_SKY[1] * (1-t) + 80*t)
-            b = int(C_SKY[2] * (1-t) + 120*t)
-            pygame.draw.line(surf, (r,g,b), (0, row), (SCR_W, row))
+        # Outside area (run-off, slightly darker/different green)
+        outside_corners=[
+            w2s(-OUT_L,-OUT_T), w2s(W_W+OUT_R,-OUT_T),
+            w2s(W_W+OUT_R,W_H+OUT_B), w2s(-OUT_L,W_H+OUT_B)
+        ]
+        pygame.draw.polygon(s,(28,100,28),outside_corners)
 
-        # Pitch polygon corners in world coords
-        corners_w = [(0,0),(W_W,0),(W_W,W_H),(0,W_H)]
-        corners_s = [w2s(wx, wy) for wx, wy in corners_w]
+        # Grass stripes (12)
+        step=W_W/12
+        for i in range(12):
+            x0,x1=i*step,(i+1)*step
+            col=(36,125,36) if i%2==0 else (46,145,46)
+            pygame.draw.polygon(s,col,[w2s(x0,0),w2s(x1,0),w2s(x1,W_H),w2s(x0,W_H)])
 
-        # Draw grass stripes (10 along x)
-        stripe_n = 10
-        step = W_W / stripe_n
-        for i in range(stripe_n):
-            x0, x1 = i*step, (i+1)*step
-            quad = [w2s(x0,0), w2s(x1,0), w2s(x1,W_H), w2s(x0,W_H)]
-            col = C_GRASS_D if i%2==0 else C_GRASS_L
-            pygame.draw.polygon(surf, col, quad)
+        # Pitch boundary
+        pygame.draw.polygon(s,(255,255,255),
+            [w2s(0,0),w2s(W_W,0),w2s(W_W,W_H),w2s(0,W_H)],2)
 
-        # Outer boundary
-        pygame.draw.polygon(surf, C_LINE, corners_s, 2)
+        # Halfway line + circle
+        pygame.draw.line(s,(255,255,255),w2s(W_MX,0),w2s(W_MX,W_H),2)
+        pts=[w2s(W_MX+CTR_R*math.cos(a),W_MY+CTR_R*math.sin(a))
+             for a in[i*math.pi/24 for i in range(49)]]
+        pygame.draw.lines(s,(255,255,255),False,pts,2)
+        pygame.draw.circle(s,(255,255,255),w2s(W_MX,W_MY),5)
 
-        # Halfway line
-        pygame.draw.line(surf, C_LINE, w2s(W_MX,0), w2s(W_MX,W_H), 2)
-
-        # Centre circle (approximate with polyline)
-        cr = 70
-        pts = [w2s(W_MX + cr*math.cos(a), W_MY + cr*math.sin(a))
-               for a in [i*math.pi/18 for i in range(37)]]
-        pygame.draw.lines(surf, C_LINE, False, pts, 2)
-        pygame.draw.circle(surf, C_LINE, w2s(W_MX, W_MY), 4)
-
-        # Penalty areas
-        pa_w, pa_h = 130, 280
-        for side_x, sign in [(0, 1), (W_W, -1)]:
-            x0 = side_x
-            x1 = side_x + sign * pa_w
-            y0 = W_MY - pa_h//2
-            y1 = W_MY + pa_h//2
-            box = [w2s(x0,y0), w2s(x1,y0), w2s(x1,y1), w2s(x0,y1)]
-            pygame.draw.lines(surf, C_LINE, True, box, 2)
-            # Penalty spot
-            pygame.draw.circle(surf, C_LINE, w2s(side_x + sign*85, W_MY), 4)
-
-        # 6-yard boxes
-        sb_w, sb_h = 42, 130
-        for side_x, sign in [(0, 1), (W_W, -1)]:
-            x0 = side_x
-            x1 = side_x + sign * sb_w
-            y0 = W_MY - sb_h//2
-            y1 = W_MY + sb_h//2
-            box = [w2s(x0,y0), w2s(x1,y0), w2s(x1,y1), w2s(x0,y1)]
-            pygame.draw.lines(surf, C_LINE, True, box, 2)
+        # Penalty areas + arcs + spots
+        for sx,sg in[(0,1),(W_W,-1)]:
+            x1=sx+sg*PA_W; y0=W_MY-PA_H//2; y1=W_MY+PA_H//2
+            pygame.draw.lines(s,(255,255,255),True,
+                [w2s(sx,y0),w2s(x1,y0),w2s(x1,y1),w2s(sx,y1)],2)
+            spot=sx+sg*110
+            pygame.draw.circle(s,(255,255,255),w2s(spot,W_MY),4)
+            arc=[w2s(spot+90*math.cos(math.radians(a)),W_MY+90*math.sin(math.radians(a)))
+                 for a in range(-62,63,4)]
+            if len(arc)>1: pygame.draw.lines(s,(255,255,255),False,arc,2)
+            # 6-yard box
+            x1b=sx+sg*SB_W; y0b=W_MY-SB_H//2; y1b=W_MY+SB_H//2
+            pygame.draw.lines(s,(255,255,255),True,
+                [w2s(sx,y0b),w2s(x1b,y0b),w2s(x1b,y1b),w2s(sx,y1b)],2)
 
         # Corner arcs
-        for cx, cy in [(0,0),(W_W,0),(0,W_H),(W_W,W_H)]:
-            arc_pts = []
-            for a_deg in range(0, 91, 5):
-                a = math.radians(a_deg)
-                sign_x = 1 if cx == 0 else -1
-                sign_y = 1 if cy == 0 else -1
-                arc_pts.append(w2s(cx + sign_x*10*math.cos(a),
-                                   cy + sign_y*10*math.sin(a)))
-            if len(arc_pts) > 1:
-                pygame.draw.lines(surf, C_LINE, False, arc_pts, 2)
+        for cx,cy in[(0,0),(W_W,0),(0,W_H),(W_W,W_H)]:
+            sxs=1 if cx==0 else -1; sys2=1 if cy==0 else -1
+            arc=[w2s(cx+sxs*12*math.cos(math.radians(a)),cy+sys2*12*math.sin(math.radians(a)))
+                 for a in range(91)]
+            if len(arc)>1: pygame.draw.lines(s,(255,255,255),False,arc,2)
 
-        # Goals (3-D box)
-        gd = 26    # depth in world units
-        gh = 55    # height in world units (screen z)
+        # Goals 3D
+        gd=GOAL_DEPTH_W; gh=GOAL_H_Z
+        for sx,sg in[(0,-1),(W_W,1)]:
+            ft=w2s(sx,GOAL_TOP);   fb=w2s(sx,GOAL_BOT)
+            bt=w2s(sx+sg*gd,GOAL_TOP); bb=w2s(sx+sg*gd,GOAL_BOT)
+            ftt=w2s(sx,GOAL_TOP,gh);  fbt=w2s(sx,GOAL_BOT,gh)
+            btt=w2s(sx+sg*gd,GOAL_TOP,gh); bbt=w2s(sx+sg*gd,GOAL_BOT,gh)
+            for base,top in[(ft,ftt),(fb,fbt),(bt,btt),(bb,bbt)]:
+                pygame.draw.line(s,(245,245,245),base,top,3)
+            pygame.draw.line(s,(245,245,245),ftt,fbt,3)
+            for a,b in[(btt,bbt),(ftt,btt),(fbt,bbt)]:
+                pygame.draw.line(s,(200,200,200),a,b,2)
+            # Net
+            nc=(185,185,185)
+            for ni in range(8):
+                t2=ni/7; gy2=GOAL_TOP+t2*(GOAL_BOT-GOAL_TOP)
+                pygame.draw.line(s,nc,w2s(sx,gy2),w2s(sx,gy2,gh),1)
+                pygame.draw.line(s,nc,w2s(sx,gy2,gh),w2s(sx+sg*gd,gy2,gh),1)
+            for ni in range(6):
+                t2=ni/5; gz=t2*gh
+                pygame.draw.line(s,nc,w2s(sx,GOAL_TOP,gz),w2s(sx,GOAL_BOT,gz),1)
 
-        for side_x, sign in [(0, -1), (W_W, 1)]:
-            # Posts
-            for gy in [GOAL_TOP, GOAL_BOT]:
-                base  = w2s(side_x, gy)
-                back  = w2s(side_x + sign*gd, gy)
-                top_f = w2s(side_x, gy, gh)
-                top_b = w2s(side_x + sign*gd, gy, gh)
-                pygame.draw.line(surf, C_WHITE, base,  top_f,  3)
-                pygame.draw.line(surf, C_WHITE, top_f, top_b,  2)
-                pygame.draw.line(surf, C_WHITE, back,  top_b,  2)
-
-            # Crossbar
-            tl = w2s(side_x, GOAL_TOP, gh)
-            tr = w2s(side_x, GOAL_BOT, gh)
-            pygame.draw.line(surf, C_WHITE, tl, tr, 3)
-
-            # Net lines (vertical)
-            net_col = (180, 180, 180, 100)
-            net_n   = 6
-            for ni in range(net_n+1):
-                t = ni / net_n
-                gy = GOAL_TOP + t*(GOAL_BOT-GOAL_TOP)
-                pygame.draw.line(surf, C_NET,
-                    w2s(side_x, gy),
-                    w2s(side_x + sign*gd, gy), 1)
-                pygame.draw.line(surf, C_NET,
-                    w2s(side_x, gy),
-                    w2s(side_x, gy, gh), 1)
-
-    # ── Drawing ───────────────────────────────────────────────────────────────
+    # ─── Draw scene ────────────────────────────────────────────────
     def draw_scene(self):
-        self.screen.blit(self.pitch_surf, (0, 0))
+        self.screen.blit(self._pitch,(0,0))
+        ents=[(p.wy,'p',p) for p in self.ta+self.tb]
+        ents.append((self.ball.wy,'b',self.ball))
+        ents.sort(key=lambda e:e[0])
+        for _,k,o in ents:
+            o.draw(self.screen,self.ball,self.f_num) if k=='p' else o.draw(self.screen)
 
-        # Collect all drawables sorted by world_y (painter's order)
-        drawables = []
-        for p in self.team_a + self.team_b:
-            drawables.append((p.wy, 'player', p))
-        drawables.append((self.ball.wy, 'ball', self.ball))
-        drawables.sort(key=lambda d: d[0])
+        # Pass suggestion
+        if self.ball.owner and self.ball.owner.team=='A' and not self.dead:
+            tgt=self._best_pass(self.ball.owner)
+            if tgt:
+                s1=w2s(self.ball.owner.wx,self.ball.owner.wy,10)
+                s2=w2s(tgt.wx,tgt.wy,10)
+                dx,dy=s2[0]-s1[0],s2[1]-s1[1]
+                n=max(3,int(math.hypot(dx,dy)//16))
+                for i in range(n):
+                    if i%2==0:
+                        t0,t1=i/n,(i+0.55)/n
+                        pygame.draw.line(self.screen,(130,255,55),
+                            (int(s1[0]+dx*t0),int(s1[1]+dy*t0)),
+                            (int(s1[0]+dx*t1),int(s1[1]+dy*t1)),2)
+                pygame.draw.circle(self.screen,(130,255,55),w2s(tgt.wx,tgt.wy),9,2)
 
-        for _, kind, obj in drawables:
-            if kind == 'player':
-                obj.draw(self.screen, self.ball, self.font_num)
-            else:
-                obj.draw(self.screen)
-
-        # Pass suggestion lines
-        if self.ball.owner and self.ball.owner.team == 'A' and not self.dead_ball:
-            self._draw_pass_lines()
-
-    def _draw_pass_lines(self):
-        carrier = self.ball.owner
-        mates = [p for p in self.team_a if p is not carrier]
-        if not mates:
-            return
-        best = self._best_pass_target(carrier)
-        if best:
-            bsx, bsy = w2s(carrier.wx, carrier.wy, 8)
-            tsx, tsy = w2s(best.wx, best.wy, 8)
-            # Dashed line
-            dx = tsx - bsx; dy = tsy - bsy
-            segs = max(4, int(math.hypot(dx,dy)//20))
-            for i in range(segs):
-                if i % 2 == 0:
-                    t0, t1 = i/segs, (i+0.5)/segs
-                    x0,y0 = int(bsx+dx*t0), int(bsy+dy*t0)
-                    x1,y1 = int(bsx+dx*t1), int(bsy+dy*t1)
-                    pygame.draw.line(self.screen, C_PASS_LINE, (x0,y0),(x1,y1), 2)
-
+    # ─── HUD ───────────────────────────────────────────────────────
     def draw_hud(self):
-        s = self.screen
-        # Score board
-        mins = self.match_time // (FPS*60)
-        secs = (self.match_time // FPS) % 60
-        bw = 310
-        bx = SCR_W//2 - bw//2
-        pygame.draw.rect(s, (8,8,8),   (bx,4,bw,44), border_radius=10)
-        pygame.draw.rect(s, (70,70,70),(bx,4,bw,44), 2, border_radius=10)
-        sc = self.font_big.render(f"  {self.score[0]}  :  {self.score[1]}  ", True, C_WHITE)
-        s.blit(sc, (SCR_W//2 - sc.get_width()//2, 5))
-        tc = self.font_hud.render(f"{mins:02d}:{secs:02d}", True, C_GRAY)
-        s.blit(tc, (SCR_W//2 - tc.get_width()//2, 48))
-
-        # Team labels
-        ta = self.font_hud.render("YOU (Blue)", True, (120, 180, 255))
-        tb = self.font_hud.render("CPU (Red)",  True, (255, 120, 120))
-        s.blit(ta, (20, 10))
-        s.blit(tb, (SCR_W - tb.get_width() - 20, 10))
+        s=self.screen
+        mins=self.match_time//(FPS*60); secs=(self.match_time//FPS)%60
+        bw=340; bx=SCR_W//2-bw//2
+        pygame.draw.rect(s,(8,8,8),(bx,4,bw,46),border_radius=10)
+        pygame.draw.rect(s,(65,65,65),(bx,4,bw,46),2,border_radius=10)
+        ta_l=self.f_hud.render("BARCELONA",True,BAR_BLUE)
+        tb_l=self.f_hud.render("REAL MADRID",True,(215,215,215))
+        s.blit(ta_l,(bx+10,14)); s.blit(tb_l,(bx+bw-tb_l.get_width()-10,14))
+        sc=self.f_big.render(f"{self.score[0]}  -  {self.score[1]}",True,(255,255,255))
+        s.blit(sc,(SCR_W//2-sc.get_width()//2,4))
+        tc=self.f_hud.render(f"{mins:02d}:{secs:02d}",True,(170,170,170))
+        s.blit(tc,(SCR_W//2-tc.get_width()//2,48))
 
         # Controls
-        ctrl = [
-            ("WASD/↑↓←→", "Move"),
-            ("Z",          "Sprint"),
-            ("SPACE",      "Pass"),
-            ("F/Shift",    "Shoot (hold=power)"),
-            ("X",          "Tackle"),
-            ("TAB",        "Switch player"),
-        ]
-        panel_x, panel_y = 10, SCR_H - 130
-        pygame.draw.rect(s,(0,0,0),(panel_x-4, panel_y-4, 220, 125), border_radius=6)
-        pygame.draw.rect(s,(50,50,50),(panel_x-4, panel_y-4, 220, 125), 1, border_radius=6)
-        for i,(key,desc) in enumerate(ctrl):
-            ks = self.font_hud.render(key, True, C_YELLOW)
-            ds = self.font_hud.render(desc, True, C_GRAY)
-            s.blit(ks, (panel_x, panel_y + i*18))
-            s.blit(ds, (panel_x + 85, panel_y + i*18))
+        ctrl=[("WASD/↑↓","Move"),("Z","Sprint"),("SPACE","Pass"),
+              ("C","Cross (near wing)"),("F/Shift","Shoot (hold=power)"),
+              ("X","Tackle"),("TAB","Switch")]
+        px,py=8,SCR_H-130
+        pygame.draw.rect(s,(0,0,0),(px-4,py-4,234,134),border_radius=6)
+        pygame.draw.rect(s,(48,48,48),(px-4,py-4,234,134),1,border_radius=6)
+        for i,(k,d) in enumerate(ctrl):
+            ks=self.f_hud.render(k,True,(255,218,0))
+            ds=self.f_hud.render(d,True,(170,170,170))
+            s.blit(ks,(px,py+i*18)); s.blit(ds,(px+84,py+i*18))
 
         # Shoot power bar
         if self.charging:
-            bw2 = 200
-            bh  = 18
-            bx2 = SCR_W//2 - bw2//2
-            by2 = SCR_H - 60
-            pygame.draw.rect(s,(30,30,30),(bx2-2,by2-2,bw2+4,bh+4),border_radius=5)
-            fill = int(bw2 * self.charge)
-            col  = (int(255*self.charge), int(200*(1-self.charge)), 0)
-            pygame.draw.rect(s, col, (bx2, by2, fill, bh), border_radius=4)
-            pygame.draw.rect(s, C_WHITE, (bx2-2,by2-2,bw2+4,bh+4), 1, border_radius=5)
-            label = self.font_hud.render("SHOOT POWER", True, C_WHITE)
-            s.blit(label, (SCR_W//2-label.get_width()//2, by2-20))
+            bw2,bh=210,20; bx2=SCR_W//2-bw2//2; by2=SCR_H-58
+            pygame.draw.rect(s,(20,20,20),(bx2-2,by2-2,bw2+4,bh+4),border_radius=6)
+            fill=int(bw2*self.charge)
+            gc=(int(55+200*self.charge),int(200*(1-self.charge**0.5)),0)
+            pygame.draw.rect(s,gc,(bx2,by2,fill,bh),border_radius=4)
+            pygame.draw.rect(s,(190,190,190),(bx2-2,by2-2,bw2+4,bh+4),1,border_radius=6)
+            lbl=self.f_hud.render(f"SHOOT  {int(self.charge*100)}%",True,(255,255,255))
+            s.blit(lbl,(SCR_W//2-lbl.get_width()//2,by2-18))
 
-        # Dead-ball banner
-        if self.dead_ball:
-            labels = {
-                'throw_in_A':'THROW-IN → YOU','throw_in_B':'THROW-IN → CPU',
-                'goal_kick_A':'GOAL KICK → YOU','goal_kick_B':'GOAL KICK → CPU',
-                'corner_A':'CORNER → YOU','corner_B':'CORNER → CPU',
-                'kickoff_A':'KICK OFF → YOU','kickoff_B':'KICK OFF → CPU',
-            }
-            lbl = labels.get(self.dead_ball,'')
-            ds  = self.font_med.render(lbl, True, C_YELLOW)
-            bx3 = SCR_W//2-ds.get_width()//2
-            pygame.draw.rect(s,(0,0,0),(bx3-12,SCR_H-62,ds.get_width()+24,34),border_radius=7)
-            s.blit(ds,(bx3, SCR_H-58))
-            cntd = max(0, self.dead_ball_timer//FPS + 1)
-            ts   = self.font_hud.render(f"Resuming in {cntd}s…", True, C_GRAY)
-            s.blit(ts,(SCR_W//2-ts.get_width()//2, SCR_H-28))
+        # Dead ball banner
+        if self.dead:
+            lbl=DB_LABELS.get(self.dead,'')
+            ds=self.f_med.render(lbl,True,(255,225,0))
+            bx3=SCR_W//2-ds.get_width()//2
+            pygame.draw.rect(s,(0,0,0),(bx3-14,SCR_H-64,ds.get_width()+28,36),border_radius=8)
+            s.blit(ds,(bx3,SCR_H-60))
+            cd=max(0,self.dead_timer//FPS+1)
+            ts=self.f_hud.render(f"Resuming in {cd}s…",True,(150,150,150))
+            s.blit(ts,(SCR_W//2-ts.get_width()//2,SCR_H-27))
 
         # Messages
-        for i,msg in enumerate(self.messages):
-            ms = self.font_med.render(msg[0], True, msg[1])
-            ms.set_alpha(min(255, msg[2]*3))
-            s.blit(ms,(SCR_W//2-ms.get_width()//2, SCR_H//2-80+i*38))
+        for i,m in enumerate(self.msgs):
+            ms=self.f_med.render(m[0],True,m[1]); ms.set_alpha(min(255,m[2]*3))
+            s.blit(ms,(SCR_W//2-ms.get_width()//2,SCR_H//2-110+i*42))
 
-        # Ball possession
+        # Possession
         if self.ball.owner:
-            side = "YOU" if self.ball.owner.team=='A' else "CPU"
-            col  = (120,180,255) if self.ball.owner.team=='A' else (255,120,120)
-            ps = self.font_hud.render(f"Ball: {side} #{self.ball.owner.num}", True, col)
-            s.blit(ps,(SCR_W//2-ps.get_width()//2, 66))
+            side="BARCELONA" if self.ball.owner.team=='A' else "REAL MADRID"
+            col=BAR_BLUE if self.ball.owner.team=='A' else (215,215,215)
+            ps=self.f_hud.render(f"Ball: {side} #{self.ball.owner.num}",True,col)
+            s.blit(ps,(SCR_W//2-ps.get_width()//2,68))
 
-    # ── Pass logic ────────────────────────────────────────────────────────────
-    def _best_pass_target(self, carrier):
-        """Find best pass target: forward, open, in space."""
-        mates = [p for p in self.team_a if p is not carrier and not p.is_keeper]
-        if not mates:
-            return None
-
-        carrier_attacking = carrier.wx  # higher = more forward for team A
-
-        scored = []
+    # ─── Pass / Cross helpers ──────────────────────────────────────
+    def _best_pass(self,carrier,team=None):
+        if team is None: team=self.ta
+        opp=self.tb if team is self.ta else self.ta
+        mates=[p for p in team if p is not carrier and not p.is_keeper]
+        if not mates: return None
+        scored=[]
         for p in mates:
-            d = dist2((carrier.wx,carrier.wy),(p.wx,p.wy))
-            # Prefer players ahead of ball carrier
-            forward_bonus = (p.wx - carrier.wx) * 0.8
-            # Penalise if opponent is close to recipient
-            opp_dist = min(dist2((q.wx,q.wy),(p.wx,p.wy)) for q in self.team_b)
-            if opp_dist < 30:
-                continue   # skip marked players
-            score = forward_bonus + opp_dist * 0.3 - d * 0.1
-            scored.append((score, p))
-
+            dd=d2((carrier.wx,carrier.wy),(p.wx,p.wy))
+            fwd=(p.wx-carrier.wx)*(1.5 if team is self.ta else -1.5)
+            opp_d=min((d2((q.wx,q.wy),(p.wx,p.wy)) for q in opp),default=999)
+            if opp_d<26: continue
+            scored.append((fwd+opp_d*0.32-dd*0.07,p))
         if not scored:
-            # Fallback: nearest
-            return min(mates, key=lambda p: dist2((carrier.wx,carrier.wy),(p.wx,p.wy)))
+            return min(mates,key=lambda p:d2((carrier.wx,carrier.wy),(p.wx,p.wy)))
+        return max(scored,key=lambda x:x[0])[1]
 
-        scored.sort(key=lambda x: -x[0])
-        return scored[0][1]
+    def _near_byline(self,p):
+        """True if player A is near the right byline, ready to cross."""
+        return p.wx > W_W*0.82 and (p.wy < W_MY-40 or p.wy > W_MY+40)
 
-    # ── Human input ───────────────────────────────────────────────────────────
+    def _do_cross(self,carrier):
+        """Whip ball into the box from a wide position."""
+        # Aim at far post / near post alternating
+        tgt_y=GOAL_TOP+20 if carrier.wy>W_MY else GOAL_BOT-20
+        tgt_y+=random.randint(-18,18)
+        tgt_x=float(W_W)+5
+        bx,by=n2(tgt_x-carrier.wx,tgt_y-carrier.wy)
+        self.ball.release()
+        self.ball.vx=bx*CROSS_SPD; self.ball.vy=by*CROSS_SPD
+        self.ball.vz=9.0  # high arc
+        self.ball.last_toucher=carrier
+        self.msg("CROSS!  ⚽",(255,200,60))
+
+    # ─── Human input ──────────────────────────────────────────────
     def handle_input(self):
-        if self.dead_ball:
-            return
-        keys  = pygame.key.get_pressed()
-        spd   = PLAYER_SPD * (SPRINT_MULT if keys[pygame.K_z] else 1.0)
-        p     = self.sel
-
-        dx, dy = 0.0, 0.0
-        if keys[pygame.K_LEFT]  or keys[pygame.K_a]: dx -= 1
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx += 1
-        if keys[pygame.K_UP]    or keys[pygame.K_w]: dy -= 1
-        if keys[pygame.K_DOWN]  or keys[pygame.K_s]: dy += 1
-
+        if self.dead: return
+        keys=pygame.key.get_pressed()
+        spd=PLAYER_SPD*(SPRINT_MULT if keys[pygame.K_z] else 1.)
+        p=self.sel
+        dx,dy=0.,0.
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: dx-=1
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx+=1
+        if keys[pygame.K_UP] or keys[pygame.K_w]: dy-=1
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]: dy+=1
         if dx or dy:
-            nx, ny = norm2(dx, dy)
-            p.vx, p.vy = nx*spd, ny*spd
-            p.fdx, p.fdy = nx, ny
-            p.wx += p.vx
-            p.wy += p.vy
-            p.wx, p.wy = world_clamp(p.wx, p.wy)
-        else:
-            p.vx *= 0.6
-            p.vy *= 0.6
+            nx,ny=n2(dx,dy); p.vx,p.vy=nx*spd,ny*spd
+            p.fdx,p.fdy=nx,ny; p.wx+=p.vx; p.wy+=p.vy
+            p.wx=clamp(p.wx,-OUT_L,W_W+OUT_R)
+            p.wy=clamp(p.wy,-OUT_T,W_H+OUT_B)
+        else: p.vx*=0.5; p.vy*=0.5
 
         # Shoot charge
-        if keys[pygame.K_f] or keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
-            if self.ball.owner and self.ball.owner.team == 'A':
-                self.charging = True
-                self.charge   = min(1.0, self.charge + 0.025)
+        shooting=keys[pygame.K_f] or keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        if shooting and self.ball.owner and self.ball.owner.team=='A':
+            self.charging=True; self.charge=min(1.,self.charge+0.024)
         else:
-            if self.charging and self.ball.owner and self.ball.owner.team == 'A':
+            if self.charging and self.ball.owner and self.ball.owner.team=='A':
                 self._human_shoot(self.charge)
-            self.charging = False
-            self.charge   = 0.0
+            self.charging=False; self.charge=0.
 
-        # Auto-collect loose ball
-        if self.ball.owner is None and self.ball.wz < 8:
-            if dist2((p.wx,p.wy),(self.ball.wx,self.ball.wy)) < CONTROL_R:
-                self.ball.owner = p
-                self.ball.last_toucher = p
+        # Auto-collect
+        if self.ball.owner is None and self.ball.wz<10:
+            if d2((p.wx,p.wy),(self.ball.wx,self.ball.wy))<CONTROL_R:
+                self.ball.owner=p; self.ball.last_toucher=p
 
-        # Tackle cooldown
-        if p.tackle_cd > 0:
-            p.tackle_cd -= 1
+        if p.tackle_cd>0: p.tackle_cd-=1
 
     def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit(); sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit(); sys.exit()
-
-                if event.key == pygame.K_TAB:
-                    self._switch_player()
-
-                if event.key == pygame.K_SPACE and not self.dead_ball:
-                    if self.ball.owner and self.ball.owner.team == 'A':
+        for ev in pygame.event.get():
+            if ev.type==pygame.QUIT: pygame.quit(); sys.exit()
+            if ev.type==pygame.KEYDOWN:
+                k=ev.key
+                if k==pygame.K_ESCAPE: pygame.quit(); sys.exit()
+                elif k==pygame.K_TAB and not self.dead:
+                    self._switch()
+                elif k==pygame.K_SPACE and not self.dead:
+                    if self.ball.owner and self.ball.owner.team=='A':
                         self._human_pass()
-
-                # Tackle
-                if event.key == pygame.K_x and not self.dead_ball:
+                elif k==pygame.K_c and not self.dead:
+                    if self.ball.owner and self.ball.owner.team=='A':
+                        if self._near_byline(self.ball.owner):
+                            self._do_cross(self.ball.owner)
+                        else:
+                            self._human_pass()  # C = pass if not near byline
+                elif k==pygame.K_x and not self.dead:
                     self._human_tackle()
+                # All other keys: safe no-op
 
-    def _switch_player(self):
-        self.sel.selected = False
-        if self.ball.owner and self.ball.owner.team == 'A':
-            self.sel = self.ball.owner
+    def _switch(self):
+        self.sel.selected=False
+        if self.ball.owner and self.ball.owner.team=='A':
+            self.sel=self.ball.owner
         else:
-            cands = [p for p in self.team_a if not p.is_keeper]
-            cands.sort(key=lambda p: dist2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
-            idx = cands.index(self.sel) if self.sel in cands else -1
-            self.sel = cands[(idx+1)%len(cands)]
-        self.sel.selected = True
+            cands=[p for p in self.ta if not p.is_keeper]
+            cands.sort(key=lambda p:d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
+            idx=cands.index(self.sel) if self.sel in cands else -1
+            self.sel=cands[(idx+1)%len(cands)]
+        self.sel.selected=True
+
+    def _auto_switch(self,p):
+        self.sel.selected=False; self.sel=p; self.sel.selected=True
 
     def _human_pass(self):
-        carrier = self.ball.owner
-        target  = self._best_pass_target(carrier)
-        if not target:
-            return
-        self.ball.last_toucher = carrier
-        self.ball.pass_to(target.wx, target.wy)
-        self.sel.selected = False
-        self.sel = target
-        self.sel.selected = True
+        carrier=self.ball.owner
+        tgt=self._best_pass(carrier)
+        if not tgt: return
+        self.ball.last_toucher=carrier
+        self.ball.kick(tgt.wx,tgt.wy,PASS_SPD,2.0)
+        self._auto_switch(tgt)
 
-    def _human_shoot(self, power):
-        carrier = self.ball.owner
-        if not carrier:
-            return
-        # Right goal = x=W_W side, aim at best spot
-        gx = float(W_W)
-        gy = clamp(carrier.wy, GOAL_TOP+15, GOAL_BOT-15) + random.randint(-15,15)
-        inac = clamp((1.0 - power)*0.35, 0, 0.3)
-        bx, by = norm2(gx - carrier.wx, gy - carrier.wy)
-        bx += random.uniform(-inac, inac)
-        by += random.uniform(-inac, inac)
-        bx, by = norm2(bx, by)
-        spd = SHOOT_SPD * (SHOOT_POWER_MIN + power * (SHOOT_POWER_MAX - SHOOT_POWER_MIN))
+    def _human_shoot(self,power):
+        c=self.ball.owner
+        if not c: return
+        gy=clamp(c.wy,GOAL_TOP+15,GOAL_BOT-15)+random.randint(-14,14)
+        inac=clamp((1.-power)*0.28,0,0.26)
+        bx,by=n2(W_W-c.wx,gy-c.wy)
+        bx+=random.uniform(-inac,inac); by+=random.uniform(-inac,inac)
+        bx,by=n2(bx,by); spd=SHOOT_SPD*(0.52+power*0.48)
         self.ball.release()
-        self.ball.vx = bx * spd
-        self.ball.vy = by * spd
-        self.ball.vz = 5.0 + power * 4.0
-        self.ball.last_toucher = carrier
+        self.ball.vx=bx*spd; self.ball.vy=by*spd
+        self.ball.vz=4.+power*8.; self.ball.last_toucher=c
 
     def _human_tackle(self):
-        p = self.sel
-        if p.tackle_cd > 0:
-            return
-        # Find nearest opponent with the ball, or near ball
-        targets = [q for q in self.team_b if not q.is_keeper]
-        for t in targets:
-            if dist2((p.wx,p.wy),(t.wx,t.wy)) < TACKLE_R + 8:
-                if self.ball.owner is t:
-                    # Tackle the ball
-                    success = random.random() < 0.62
-                    if success:
-                        self.ball.release()
-                        bx, by = norm2(p.wx-t.wx, p.wy-t.wy)
-                        self.ball.vx = bx*4 + random.uniform(-1.5,1.5)
-                        self.ball.vy = by*4 + random.uniform(-1.5,1.5)
-                        self.ball.last_toucher = p
-                        self.add_msg("TACKLE! Ball won!", C_LIME)
-                    else:
-                        self.add_msg("Tackle missed!", (255,180,80))
-                    p.tackle_cd = 45
-                    return
+        p=self.sel
+        if p.tackle_cd>0: return
+        for t in self.tb:
+            if t.is_keeper: continue
+            dd=d2((p.wx,p.wy),(t.wx,t.wy))
+            if dd<TACKLE_R+10 and self.ball.owner is t:
+                ok=random.random()<0.62
+                if ok:
+                    prev=t
+                    self.ball.release()
+                    bx,by=n2(p.wx-prev.wx,p.wy-prev.wy)
+                    self.ball.vx=bx*4.5+random.uniform(-1.5,1.5)
+                    self.ball.vy=by*4.5+random.uniform(-1.5,1.5)
+                    self.ball.last_toucher=p
+                    self.msg("TACKLE! Ball won!",(80,255,80))
+                    self._auto_switch(p)
+                else:
+                    self.msg("Tackle missed!",(255,160,60))
+                p.tackle_cd=48; return
 
-    # ── Team A attack support AI ──────────────────────────────────────────────
+    # ─── Keeper AI ────────────────────────────────────────────────
+    def _keeper_ai(self,keeper,gx,is_left):
+        b=self.ball
+        coming=False
+        if b.owner is None and b.spd()>0.9:
+            fx=b.wx+b.vx*26
+            coming=(fx<W_MX) if is_left else (fx>W_MX)
+        if coming and abs(b.vx)>0.15:
+            t2=(gx-b.wx)/b.vx
+            if 0<t2<65:
+                iy=clamp(b.wy+b.vy*t2,GOAL_TOP+3,GOAL_BOT-3)
+                out=38 if is_left else -38
+                keeper.move_toward(gx+out,iy,AI_JOG*1.3); return
+        ky=clamp(b.wy,GOAL_TOP+22,GOAL_BOT-22)
+        in_half=(b.wx<W_MX) if is_left else (b.wx>W_MX)
+        if is_left: kx=clamp(28+(b.wx*0.055 if in_half else 0),20,82)
+        else: kx=clamp(W_W-28-((W_W-b.wx)*0.055 if in_half else 0),W_W-82,W_W-20)
+        keeper.move_toward(kx,ky,AI_WALK*0.88)
+
+    # ─── Team A support AI ────────────────────────────────────────
     def update_team_a_ai(self):
-        """When a human player has the ball, teammates make intelligent runs."""
-        carrier = self.ball.owner
-        if not (carrier and carrier.team == 'A'):
-            return
-
-        for p in self.team_a:
-            if p is carrier or p is self.sel:
+        carrier=self.ball.owner
+        has_ball_a=carrier and carrier.team=='A'
+        for p in self.ta:
+            if p is self.sel or p.is_keeper: continue
+            if not has_ball_a:
+                # Hold shape, stay behind ball
+                tx=clamp(p.home_x,30,self.ball.wx-35)
+                ty=p.home_y+(self.ball.wy-W_MY)*0.12
+                p.move_toward(tx,ty,AI_WALK*0.82)
                 continue
-            if p.is_keeper:
-                # Keeper stays back, tracks ball height
-                gkx = clamp(carrier.wx*0.15, 15, 80)
-                gky = clamp(carrier.wy, GOAL_TOP+20, GOAL_BOT-20)
-                p.move_toward(gkx, gky, AI_WALK*0.9)
-                continue
-
-            # Role index: 1-4 = defenders, 5-7 = midfielders, 8-10 = forwards
-            role = p.num - 1   # 1..10
-            if role <= 4:
-                # Defenders: push up slightly but stay behind ball
-                safe_x = min(carrier.wx - 60, p.home_x + 40)
-                safe_x = max(safe_x, p.home_x - 20)
-                ty = p.home_y + (carrier.wy - W_MY) * 0.15
-                p.move_toward(safe_x, ty, AI_WALK)
-            elif role <= 7:
-                # Midfielders: spread wide, offer triangle passes
-                angle = math.radians((role - 6) * 60)
-                offset_x = math.cos(angle) * 80
-                offset_y = math.sin(angle) * 90
-                tx = clamp(carrier.wx + offset_x, 50, W_W-50)
-                ty = clamp(carrier.wy + offset_y, 20, W_H-20)
-                p.move_toward(tx, ty, AI_JOG*0.85)
+            role=p.num  # 2-5=def,6-8=mid,9-11=fwd
+            if 2<=role<=5:
+                sx=min(carrier.wx-52,p.home_x+55); sx=max(sx,p.home_x)
+                ty=p.home_y+(carrier.wy-W_MY)*0.14
+                p.move_toward(sx,ty,AI_JOG*0.80)
+            elif 6<=role<=8:
+                ang=math.radians((role-7)*65+90)
+                tx=clamp(carrier.wx+math.cos(ang)*95,55,W_W-55)
+                ty=clamp(carrier.wy+math.sin(ang)*100,18,W_H-18)
+                p.move_toward(tx,ty,AI_JOG)
             else:
-                # Forwards: make forward runs into channels
-                channel_y = GOAL_TOP + 20 if p.num == 9 else \
-                            (GOAL_TOP - 25 if p.num == 8 else GOAL_BOT + 25)
-                tx = clamp(carrier.wx + 90 + (p.num-9)*20, carrier.wx+30, W_W-30)
-                ty = clamp(channel_y, 20, W_H-20)
-                p.move_toward(tx, ty, AI_JOG)
+                ch=[GOAL_TOP+28,W_MY,GOAL_BOT-28][role-9]
+                rx=clamp(carrier.wx+105,carrier.wx+45,W_W-38)
+                ty=clamp(ch+random.uniform(-14,14),18,W_H-18)
+                p.move_toward(rx,ty,AI_RUN if rx>W_W*0.6 else AI_JOG)
+        self._keeper_ai(self.ta[0],0,is_left=True)
 
-    # ── Keeper AI ─────────────────────────────────────────────────────────────
-    def _update_keeper(self, keeper, goal_x, is_left):
-        ball = self.ball
+    # ─── CPU AI — build-up play ───────────────────────────────────
+    def update_cpu(self):
+        if self.dead: return
+        self._keeper_ai(self.tb[0],W_W,is_left=False)
+        outfield=self.tb[1:]
+        ball_b=self.ball.owner and self.ball.owner.team=='B'
+        ball_a=self.ball.owner and self.ball.owner.team=='A'
+        closest=min(outfield,key=lambda p:d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
 
-        # Is ball heading toward our goal?
-        ball_coming = False
-        if ball.owner is None and ball.spd() > 1.0:
-            future_x = ball.wx + ball.vx * 25
-            ball_coming = (future_x < W_MX) if is_left else (future_x > W_MX)
+        for p in outfield:
+            if p.tackle_cd>0: p.tackle_cd-=1
+            if p.react>0:
+                p.react-=1
+                p.move_toward(p.home_x,p.home_y,AI_WALK*0.72); continue
 
-        if ball_coming and abs(ball.vx) > 0.2:
-            t = (goal_x - ball.wx) / ball.vx
-            if 0 < t < 60:
-                iy = clamp(ball.wy + ball.vy*t, GOAL_TOP+5, GOAL_BOT-5)
-                # Move out slightly to intercept
-                out = 35 if is_left else -35
-                keeper.move_toward(goal_x + out, iy, AI_JOG * 1.4)
-                return
-
-        # Keeper: stay near goal line, gentle lateral tracking only
-        ky = clamp(ball.wy, GOAL_TOP+20, GOAL_BOT-20)
-        # Only come off line if ball is in their half
-        in_half = (ball.wx < W_MX) if is_left else (ball.wx > W_MX)
-        if is_left:
-            kx = GOAL_TOP*0 + 28   # fixed x near left goal
-            # Small come-out
-            if in_half:
-                kx = clamp(ball.wx*0.12 + 20, 20, 80)
-        else:
-            kx = W_W - 28
-            if in_half:
-                kx = clamp(W_W - ball.wx*0.12 - 20, W_W-80, W_W-20)
-
-        keeper.move_toward(kx, ky, AI_WALK * 0.95)
-
-    # ── CPU AI ────────────────────────────────────────────────────────────────
-    def update_ai(self):
-        if self.dead_ball:
-            return
-
-        ball = self.ball
-
-        # Team A keeper
-        self._update_keeper(self.team_a[0], 0, is_left=True)
-        # Team B keeper
-        self._update_keeper(self.team_b[0], W_W, is_left=False)
-
-        outfield_b = self.team_b[1:]
-        ball_b = ball.owner and ball.owner.team == 'B'
-        ball_a = ball.owner and ball.owner.team == 'A'
-
-        closest_b = min(outfield_b, key=lambda p: dist2((p.wx,p.wy),(ball.wx,ball.wy)))
-
-        for p in outfield_b:
-            if p.tackle_cd > 0:
-                p.tackle_cd -= 1
-
-            if p.react > 0:
-                p.react -= 1
-                p.move_toward(p.home_x, p.home_y, AI_WALK*0.8)
-                continue
-
-            if ball_b and ball.owner is p:
+            if ball_b and self.ball.owner is p:
                 self._cpu_carry(p)
-
-            elif ball.owner is None:
-                d = dist2((p.wx,p.wy),(ball.wx,ball.wy))
-                if d < AI_PRESS * 1.4:
-                    p.move_toward(ball.wx, ball.wy, AI_JOG)
-                else:
-                    p.move_toward(p.home_x, p.home_y, AI_WALK)
-                if ball.wz < 12 and d < CONTROL_R:
-                    ball.owner = p
-                    ball.last_toucher = p
-                    for q in outfield_b:
-                        q.react = random.randint(8, AI_REACT//2)
-
+            elif self.ball.owner is None:
+                dd=d2((p.wx,p.wy),(self.ball.wx,self.ball.wy))
+                if dd<150: p.move_toward(self.ball.wx,self.ball.wy,AI_JOG)
+                else: p.move_toward(p.home_x,p.home_y,AI_WALK)
+                if self.ball.wz<12 and dd<CONTROL_R:
+                    self.ball.owner=p; self.ball.last_toucher=p
+                    for q in outfield: q.react=random.randint(6,AI_REACT//2)
             elif ball_a:
-                if p is closest_b:
-                    d = dist2((p.wx,p.wy),(ball.wx,ball.wy))
-                    if d < AI_PRESS:
-                        p.move_toward(ball.wx, ball.wy, AI_JOG)
-                        # CPU tackle attempt
-                        if d < TACKLE_R and p.tackle_cd == 0 and random.random() < AI_TACKLE:
-                            if ball.owner:
-                                ball.release()
-                                bx,by = norm2(p.wx-ball.owner.wx, p.wy-ball.owner.wy)
-                                ball.vx = bx*3+random.uniform(-1,1)
-                                ball.vy = by*3+random.uniform(-1,1)
-                                ball.last_toucher = p
-                                p.tackle_cd = 50
-                    else:
-                        mx = (p.home_x+ball.wx)/2
-                        my = (p.home_y+ball.wy)/2
-                        p.move_toward(mx, my, AI_WALK)
-                else:
-                    # Hold shape
-                    tx = max(p.home_x, W_W - W_W*0.55)
-                    ty = p.home_y + (ball.wy-W_MY)*0.18
-                    p.move_toward(tx, ty, AI_WALK*0.85)
+                self._cpu_defend(p,closest)
 
-    def _cpu_carry(self, p):
-        ball   = self.ball
-        goal_x = 0.0
-        goal_y = float(W_MY)
-        d_g    = dist2((p.wx,p.wy),(goal_x,goal_y))
-        pres   = [q for q in self.team_a if dist2((q.wx,q.wy),(p.wx,p.wy)) < 60]
+    def _cpu_carry(self,p):
+        """CPU carrier: build-up passes + dribble + shoot."""
+        b=self.ball; goal_x=0.; d_goal=d2((p.wx,p.wy),(goal_x,W_MY))
+        pres=[q for q in self.ta if d2((q.wx,q.wy),(p.wx,p.wy))<68]
 
-        # Shoot
-        if d_g < AI_SHOOT_R and random.random() < 0.024:
-            gy = clamp(p.wy, GOAL_TOP+12, GOAL_BOT-12) + random.randint(-22,22)
-            bx,by = norm2(goal_x-p.wx, gy-p.wy)
-            inac = clamp(d_g/1800, 0.06, 0.26)
-            bx += random.uniform(-inac,inac); by += random.uniform(-inac,inac)
-            bx,by = norm2(bx,by)
-            ball.release()
-            ball.vx = bx*SHOOT_SPD*0.84
-            ball.vy = by*SHOOT_SPD*0.84
-            ball.vz = 4.0
-            ball.last_toucher = p
-            for q in self.team_b[1:]:
-                q.react = random.randint(15,35)
+        # Shoot when in range
+        if d_goal<280 and random.random()<0.022:
+            gy=clamp(p.wy,GOAL_TOP+12,GOAL_BOT-12)+random.randint(-22,22)
+            bx,by=n2(goal_x-p.wx,gy-p.wy)
+            inac=clamp(d_goal/1900,0.06,0.24)
+            bx+=random.uniform(-inac,inac); by+=random.uniform(-inac,inac)
+            bx,by=n2(bx,by); b.release()
+            b.vx=bx*SHOOT_SPD*0.82; b.vy=by*SHOOT_SPD*0.82; b.vz=4.5
+            b.last_toucher=p
+            for q in self.tb[1:]: q.react=random.randint(12,32)
             return
 
-        # Pass under pressure
-        if pres and random.random() < 0.02:
-            mates = [q for q in self.team_b if q is not p and not q.is_keeper]
-            if mates:
-                tgt = min(mates, key=lambda q: q.wx+random.uniform(-25,25))
-                ball.pass_to(tgt.wx, tgt.wy)
-                ball.last_toucher = p
-                for q in self.team_b[1:]:
-                    q.react = random.randint(8,22)
+        # Cross from wide positions
+        near_byline=(p.wx<W_W*0.18 and
+                     (p.wy<W_MY-38 or p.wy>W_MY+38))
+        if near_byline and random.random()<0.025:
+            tgt_y=GOAL_TOP+20 if p.wy>W_MY else GOAL_BOT-20
+            bx,by=n2(W_W-p.wx-(W_W+10)+p.wx, tgt_y-p.wy)
+            # Actually kick toward left goal
+            bx,by=n2(0-p.wx,tgt_y-p.wy)
+            b.release(); b.vx=bx*CROSS_SPD; b.vy=by*CROSS_SPD; b.vz=8.5
+            b.last_toucher=p
+            for q in self.tb[1:]: q.react=random.randint(6,18)
+            return
+
+        # Build-up pass (pass more often, not just under pressure)
+        pass_chance=0.018 if not pres else 0.032
+        if random.random()<pass_chance:
+            tgt=self._best_pass(p,team=self.tb)
+            if tgt:
+                b.kick(tgt.wx,tgt.wy,PASS_SPD,2.0); b.last_toucher=p
+                for q in self.tb[1:]: q.react=random.randint(5,18)
                 return
 
-        # Dribble
-        dodge = 0.0
+        # Dribble with dodge
+        dodge=0.
         if pres:
-            avg = sum(q.wy for q in pres)/len(pres)
-            dodge = 28 if p.wy < avg else -28
-        p.move_toward(goal_x+55, goal_y+dodge, AI_RUN)
+            avg=sum(q.wy for q in pres)/len(pres)
+            dodge=30. if p.wy<avg else -30.
+        p.move_toward(goal_x+55,W_MY+dodge,AI_RUN)
 
-    # ── Physics / events ─────────────────────────────────────────────────────
-    def check_goals(self):
-        if self.dead_ball:
-            return
-        b = self.ball
-        if b.wz > 20:
-            return   # too high
+    def _cpu_defend(self,p,closest):
+        """CPU defending: soft pressing, don't all rush."""
+        b=self.ball; role=p.num
+        dd=d2((p.wx,p.wy),(b.wx,b.wy))
 
-        # Left goal (B scores)
-        if b.wx <= -BALL_R and GOAL_TOP <= b.wy <= GOAL_BOT:
-            self.score[1] += 1
-            self.add_msg("⚽  GOAL! — CPU scores!", (255,100,100))
-            self._start_dead('kickoff_A', None); return
-
-        # Right goal (A scores)
-        if b.wx >= W_W + BALL_R and GOAL_TOP <= b.wy <= GOAL_BOT:
-            self.score[0] += 1
-            self.add_msg("⚽  GOAL! — YOU score!", C_LIME)
-            self._start_dead('kickoff_B', None); return
-
-    def check_out(self):
-        if self.dead_ball or self.ball.owner:
-            return
-        b    = self.ball
-        last = b.last_toucher
-
-        # Top/Bottom
-        if b.wy < -BALL_R or b.wy > W_H + BALL_R:
-            kind = 'throw_in_B' if last and last.team=='A' else 'throw_in_A'
-            tx = clamp(b.wx, 30, W_W-30)
-            ty = 8 if b.wy < 0 else W_H-8
-            self._start_dead(kind, (tx,ty)); return
-
-        # Left byline (not goal)
-        if b.wx < -BALL_R and not (GOAL_TOP<=b.wy<=GOAL_BOT):
-            if last and last.team=='A':
-                pos=(30, clamp(b.wy,30,W_H-30)); self._start_dead('goal_kick_B',pos)
+        if p is closest:
+            # One player presses hard
+            if dd<125:
+                p.move_toward(b.wx,b.wy,AI_JOG)
+                # Soft tackle — won't always succeed (prevents wall)
+                if dd<TACKLE_R and p.tackle_cd==0 and random.random()<0.010:
+                    if b.owner:
+                        prev=b.owner; b.release()
+                        bx,by=n2(p.wx-prev.wx,p.wy-prev.wy)
+                        b.vx=bx*3.2+random.uniform(-1,1)
+                        b.vy=by*3.2+random.uniform(-1,1)
+                        b.last_toucher=p; p.tackle_cd=55
             else:
-                cy=8 if b.wy<W_MY else W_H-8; self._start_dead('corner_A',(8,cy))
-            return
-
-        # Right byline (not goal)
-        if b.wx > W_W+BALL_R and not (GOAL_TOP<=b.wy<=GOAL_BOT):
-            if last and last.team=='B':
-                pos=(W_W-30, clamp(b.wy,30,W_H-30)); self._start_dead('goal_kick_A',pos)
-            else:
-                cy=8 if b.wy<W_MY else W_H-8; self._start_dead('corner_B',(W_W-8,cy))
-
-    def _start_dead(self, kind, pos):
-        self.ball.owner = None
-        self.ball.vx = self.ball.vy = self.ball.vz = 0.0
-        self.dead_ball = kind
-        if pos:
-            self.dead_ball_pos = pos
-            self.ball.wx, self.ball.wy = float(pos[0]), float(pos[1])
+                p.move_toward((p.home_x+b.wx*0.55)/1.55,
+                              (p.home_y+b.wy*0.55)/1.55,AI_WALK)
+        elif 2<=role<=5:
+            # Defenders: block passing lane between ball and goal
+            lx=clamp((b.wx+W_W)*0.50,p.home_x,W_W-38)
+            ly=p.home_y+(b.wy-W_MY)*0.20
+            p.move_toward(lx,ly,AI_WALK)
+        elif 6<=role<=8:
+            # Midfielders: compact block second line — SOFT press, stay in shape
+            mx=max(p.home_x,W_W-W_W*0.58)
+            my=p.home_y+(b.wy-W_MY)*0.18
+            p.move_toward(mx,my,AI_WALK*0.88)
         else:
-            self.dead_ball_pos = (float(W_MX), float(W_MY))
-            self.ball.wx, self.ball.wy = float(W_MX), float(W_MY)
-        self.ball.wz = 0.0
-        self.dead_ball_timer = FPS * 2
+            # Forwards: press high to cut long balls, but don't sprint
+            px=clamp(b.wx+55,W_MX,W_W-48)
+            py=p.home_y+(b.wy-W_MY)*0.16
+            p.move_toward(px,py,AI_JOG*0.78)
+
+    # ─── Dead ball (throw-in / corner animation) ──────────────────
+    def _start_dead(self,kind,pos):
+        self.ball.owner=None; self.ball.vx=self.ball.vy=self.ball.vz=0.
+        self.dead=kind; self.dead_pos=pos if pos else (W_MX,W_MY)
+        self.ball.wx=float(self.dead_pos[0]); self.ball.wy=float(self.dead_pos[1])
+        self.ball.wz=0.; self.dead_timer=FPS*2+20
+        self.throw_player=None
 
     def update_dead(self):
-        if not self.dead_ball:
-            return
-        self.dead_ball_timer -= 1
-        if self.dead_ball_timer > 0:
-            return
-        kind = self.dead_ball
-        bx, by = self.dead_ball_pos
-        if kind in ('kickoff_A','kickoff_B'):
-            self._kickoff('A' if 'A' in kind else 'B'); return
-        team = self.team_a if kind.endswith('_A') else self.team_b
-        nearest = min(team, key=lambda p: dist2((p.wx,p.wy),(bx,by)))
-        nearest.wx, nearest.wy = float(bx), float(by)
-        self.ball.wx, self.ball.wy, self.ball.wz = float(bx), float(by), 0.0
-        self.ball.owner = nearest
-        self.ball.last_toucher = nearest
-        self.dead_ball = None
+        if not self.dead: return
+        self.dead_timer-=1
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
+        # Show throw animation during waiting period
+        kind=self.dead; bx,by=self.dead_pos
+        if self.throw_player is None and self.dead_timer<=FPS*2:
+            # Pick the player who will do the throw/corner
+            if kind in(DB_THROW_A,DB_GK_A,DB_CORNER_A): team=self.ta
+            elif kind in(DB_THROW_B,DB_GK_B,DB_CORNER_B): team=self.tb
+            else: team=None
+            if team:
+                tp=min(team,key=lambda p:d2((p.wx,p.wy),(bx,by)))
+                tp.wx=float(bx); tp.wy=float(by)
+                self.throw_player=tp; tp.throw_anim=1
+
+        if self.throw_player:
+            self.throw_player.throw_anim=min(30,self.throw_player.throw_anim+1)
+
+        if self.dead_timer>0: return
+
+        # Resume play
+        if kind in(DB_KICK_A,DB_KICK_B):
+            if self.throw_player: self.throw_player.throw_anim=0
+            self._kickoff('A' if 'A' in kind else 'B'); return
+
+        team=self.ta if kind.endswith('_A') else self.tb
+        nearest=min(team,key=lambda p:d2((p.wx,p.wy),(bx,by)))
+        nearest.wx,nearest.wy=float(bx),float(by)
+        self.ball.wx,self.ball.wy,self.ball.wz=float(bx),float(by),0.
+        self.ball.owner=nearest; self.ball.last_toucher=nearest
+        nearest.throw_anim=0
+        if self.throw_player: self.throw_player.throw_anim=0
+
+        # For corners: automatically cross the ball (AI and human)
+        if kind in(DB_CORNER_A,DB_CORNER_B):
+            # Aim at near/far post
+            tgt_y=GOAL_TOP+22 if nearest.wy<W_MY else GOAL_BOT-22
+            tgt_y+=random.randint(-16,16)
+            if kind==DB_CORNER_A:
+                self.ball.kick(float(W_W),tgt_y,CROSS_SPD,9.5)
+            else:
+                self.ball.kick(0.,tgt_y,CROSS_SPD,9.5)
+            self.ball.last_toucher=nearest
+            nearest.throw_anim=0; self.dead=None; self.throw_player=None
+            return
+
+        if nearest.team=='A': self._auto_switch(nearest)
+        self.dead=None; self.throw_player=None
+
+    # ─── Goals & out ──────────────────────────────────────────────
+    def check_goals(self):
+        if self.dead: return
+        b=self.ball
+        if b.wz>24: return
+        if b.wx<=-BALL_R and GOAL_TOP<=b.wy<=GOAL_BOT:
+            self.score[1]+=1; self.msg("⚽  GOAL! — REAL MADRID!",(215,215,215))
+            self._start_dead(DB_KICK_A,None)
+        elif b.wx>=W_W+BALL_R and GOAL_TOP<=b.wy<=GOAL_BOT:
+            self.score[0]+=1; self.msg("⚽  GOAL! — BARCELONA!",BAR_BLUE)
+            self._start_dead(DB_KICK_B,None)
+
+    def check_out(self):
+        if self.dead or self.ball.owner: return
+        b=self.ball; lt=b.last_toucher
+
+        # Top/bottom → throw-in
+        if b.wy<-BALL_R or b.wy>W_H+BALL_R:
+            kind=DB_THROW_B if lt and lt.team=='A' else DB_THROW_A
+            tx=clamp(b.wx,38,W_W-38)
+            ty=10 if b.wy<0 else W_H-10
+            self._start_dead(kind,(tx,ty)); return
+
+        # Left byline
+        if b.wx<-BALL_R and not(GOAL_TOP<=b.wy<=GOAL_BOT):
+            if lt and lt.team=='A':
+                self._start_dead(DB_GK_B,(34,clamp(b.wy,38,W_H-38)))
+            else:
+                cy=10 if b.wy<W_MY else W_H-10
+                self._start_dead(DB_CORNER_A,(8,cy))
+            return
+
+        # Right byline
+        if b.wx>W_W+BALL_R and not(GOAL_TOP<=b.wy<=GOAL_BOT):
+            if lt and lt.team=='B':
+                self._start_dead(DB_GK_A,(W_W-34,clamp(b.wy,38,W_H-38)))
+            else:
+                cy=10 if b.wy<W_MY else W_H-10
+                self._start_dead(DB_CORNER_B,(W_W-8,cy))
+
+    # ─── Main loop ────────────────────────────────────────────────
     def run(self):
         while True:
             self.clock.tick(FPS)
-            self.match_time += 1
-
+            self.match_time+=1
             self.handle_events()
             self.handle_input()
 
-            if not self.dead_ball:
-                self.update_ai()
+            if not self.dead:
+                self.update_cpu()
                 self.update_team_a_ai()
                 self.ball.update()
                 self.check_goals()
                 self.check_out()
 
-                # AI auto-collect
-                if self.ball.owner is None and self.ball.wz < 10:
-                    for p in self.team_a + self.team_b:
-                        if dist2((p.wx,p.wy),(self.ball.wx,self.ball.wy)) < CONTROL_R:
-                            self.ball.owner = p
-                            self.ball.last_toucher = p
+                # Auto-collect loose ball
+                if self.ball.owner is None and self.ball.wz<11:
+                    all_p=self.ta+self.tb
+                    all_p.sort(key=lambda p:d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
+                    for p in all_p:
+                        if d2((p.wx,p.wy),(self.ball.wx,self.ball.wy))<CONTROL_R:
+                            self.ball.owner=p; self.ball.last_toucher=p
                             if p.team=='B':
-                                for q in self.team_b[1:]:
-                                    q.react = random.randint(8,28)
+                                for q in self.tb[1:]: q.react=random.randint(7,24)
+                            elif p is not self.sel:
+                                self._auto_switch(p)
                             break
             else:
                 self.update_dead()
 
-            self.messages = [[t,c,n-1] for t,c,n in self.messages if n>0]
-
+            self.msgs=[[t,c,n-1] for t,c,n in self.msgs if n>0]
             self.draw_scene()
             self.draw_hud()
             pygame.display.flip()
 
 
-if __name__ == "__main__":
-    game = FootballGame()
-    game.run()
+if __name__=="__main__":
+    try:
+        Game().run()
+    except SystemExit:
+        pass
