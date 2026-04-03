@@ -52,8 +52,10 @@ class Game:
         self.dead_pos     = (W_MX, W_MY)
         self.dead_timer   = 0
         self.throw_player = None
-        # When a throw-in is live, force the thrower to pass not dribble
-        self.throw_must_pass = False
+        # Throw-in force-pass state
+        self.throw_must_pass     = False
+        self._throw_pass_thrower = None
+        self._throw_pass_timer   = 0
 
         # Kickoff freeze: all players locked until this reaches 0
         self.kickoff_freeze = FPS * 2   # 2 seconds
@@ -94,6 +96,8 @@ class Game:
         self._shot_queued      = False
         self.throw_player      = None
         self.throw_must_pass   = False
+        self._throw_pass_thrower = None
+        self._throw_pass_timer   = 0
         self.kickoff_side      = side
         self.kickoff_freeze    = FPS * 2
         self.gk_hold_timer     = 0
@@ -147,9 +151,8 @@ class Game:
 
         # FREEZE: no input at all during kickoff countdown or dead ball
         if self.kickoff_freeze > 0 or self.dead:
-            self.charging     = False
-            self.charge       = 0.0
-            self._shot_queued = False
+            self.charging = False
+            self.charge   = 0.0
             return
 
         # Throw-in active: thrower is locked in place, must only pass
@@ -367,45 +370,45 @@ class Game:
     # ── Throw-in force-pass (bug fix 3) ───────────────────────────
     def _update_throw_in_pass(self):
         """
-        During a throw-in, the player at the spot must immediately pass.
-        They are not allowed to dribble. This is enforced by instantly
-        passing to the best open teammate when the dead ball resumes.
-        The throw_must_pass flag keeps them locked until the kick happens.
+        After a throw-in the ball stays frozen (no owner).
+        After a short delay the thrower auto-passes to a teammate.
+        The thrower cannot dribble because they never receive ownership.
         """
         if not self.throw_must_pass:
             return
-        thrower = self.ball.owner
-        if thrower is None:
-            self.throw_must_pass = False
+
+        self._throw_pass_timer -= 1
+        if self._throw_pass_timer > 0:
+            # Keep ball frozen at the throw spot
+            tp = self._throw_pass_thrower
+            self.ball.wx = tp.wx
+            self.ball.wy = tp.wy
+            self.ball.wz = 0.0
+            self.ball.vx = self.ball.vy = self.ball.vz = 0.0
             return
 
-        # Auto-pass after a 30-frame delay (0.5 s) so the animation plays
-        thrower.hold_timer = getattr(thrower, '_throw_pass_delay', FPS)
-        if not hasattr(thrower, '_throw_pass_delay'):
-            thrower._throw_pass_delay = FPS // 2
-        thrower._throw_pass_delay -= 1
-        if thrower._throw_pass_delay > 0:
-            return
+        # Timer expired: find a receiver and kick
+        tp   = self._throw_pass_thrower
+        team = self.ta if tp.team == 'A' else self.tb
+        opp  = self.tb if tp.team == 'A' else self.ta
 
-        # Pick a teammate to pass to
-        team = self.ta if thrower.team == 'A' else self.tb
-        opp  = self.tb if thrower.team == 'A' else self.ta
-        tgt  = best_pass_target(thrower, team, opp)
+        tgt = best_pass_target(tp, team, opp)
         if tgt is None:
-            mates = [p for p in team if p is not thrower]
-            if mates:
-                tgt = min(mates, key=lambda p: d2((thrower.wx,thrower.wy),(p.wx,p.wy)))
+            mates = [p for p in team if p is not tp]
+            tgt = min(mates, key=lambda p: d2((tp.wx,tp.wy),(p.wx,p.wy))) if mates else None
+
         if tgt:
-            lead_x = clamp(tgt.wx + tgt.vx*8, 5, W_W-5)
-            lead_y = clamp(tgt.wy + tgt.vy*8, 5, W_H-5)
-            self.ball.last_toucher = thrower
-            self.ball.kick(lead_x, lead_y, PASS_SPD, 2.5)
-            thrower.throw_anim = 0
-            if thrower.team == 'A':
+            lead_x = clamp(tgt.wx + tgt.vx * 8, 5, W_W - 5)
+            lead_y = clamp(tgt.wy + tgt.vy * 8, 5, W_H - 5)
+            self.ball.last_toucher = tp
+            self.ball.kick(lead_x, lead_y, PASS_SPD, 2.0)
+            tp.throw_anim = 0
+            if tp.team == 'A':
                 self._auto_switch(tgt)
-        self.throw_must_pass = False
-        if hasattr(thrower, '_throw_pass_delay'):
-            del thrower._throw_pass_delay
+
+        self.throw_must_pass        = False
+        self._throw_pass_thrower    = None
+        self._throw_pass_timer      = 0
 
     # ── Goals ─────────────────────────────────────────────────────
     def _check_goals(self):
@@ -473,6 +476,8 @@ class Game:
         self.dead_timer       = FPS * 2 + 20
         self.throw_player     = None
         self.throw_must_pass  = False
+        self._throw_pass_thrower = None
+        self._throw_pass_timer   = 0
         self.gk_hold_timer    = 0
         self.charging         = False
         self.charge           = 0.0
@@ -539,10 +544,17 @@ class Game:
 
         # Throw-ins must pass, not dribble
         if kind in (DB_THROW_A, DB_THROW_B):
+            # Do NOT give ball ownership — we keep owner=None and use a timer
+            # so the ball stays frozen at the spot. After half a second, auto-pass.
+            self.ball.owner = None   # thrower does NOT own the ball yet
+            self.ball.wx = float(bx)
+            self.ball.wy = float(by)
             self.throw_must_pass = True
-            if hasattr(nearest, '_throw_pass_delay'):
-                del nearest._throw_pass_delay
-            nearest._throw_pass_delay = FPS // 2  # 0.5 s delay then auto-pass
+            self._throw_pass_thrower = nearest
+            self._throw_pass_timer   = FPS // 2   # 0.5 s then kick
+        else:
+            # Goal kicks: give normal ball ownership
+            self.throw_must_pass = False
 
         if nearest.team == 'A':
             self._auto_switch(nearest)
@@ -566,20 +578,22 @@ class Game:
                 # GK stuck fix
                 self._update_gk_logic()
 
-                # Throw-in force pass
+                # Throw-in force pass (ball frozen, auto-passes after timer)
                 self._update_throw_in_pass()
 
-                # AI (only when game is live and not frozen)
-                cpu_ai(self.tb, self.ta, self.ball)
-                cpu_attacking_shape(self.tb, self.ball)
-                team_a_support(self.ta, self.sel, self.ball)
+                # AI only runs when not in a throw-in pause
+                if not self.throw_must_pass:
+                    cpu_ai(self.tb, self.ta, self.ball)
+                    cpu_attacking_shape(self.tb, self.ball)
+                    team_a_support(self.ta, self.sel, self.ball)
 
                 self.ball.update()
                 self._check_goals()
                 self._check_out()
 
-                # Auto-collect loose ball
-                if self.ball.owner is None and self.ball.wz < 11:
+                # Auto-collect loose ball — but NOT during a throw-in
+                # (ball has no owner but must stay frozen until the pass fires)
+                if not self.throw_must_pass and self.ball.owner is None and self.ball.wz < 11:
                     all_p = self.ta + self.tb
                     all_p.sort(key=lambda p: d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
                     for p in all_p:

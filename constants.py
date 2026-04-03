@@ -21,16 +21,22 @@ SCR_W, SCR_H = 1280, 800
 FPS           = 60
 
 # ── Isometric projection ─────────────────────────────────────────
-_SC    = 0.60
-ISO_SX = math.cos(math.radians(30)) * _SC
-ISO_SY = math.sin(math.radians(30)) * _SC
-ISO_CX = SCR_W // 2
-ISO_CY = SCR_H // 2 + 55
-ISO_VZ = 1.08
+# Standard dimetric (cabinet) projection:
+#   screen_x = (world_x - world_y) * cos30 * scale  +  cx
+#   screen_y = (world_x + world_y) * sin30 * scale  -  wz * vz_scale  +  cy
+# Using the SAME cos30 scale for both x and y world axes guarantees
+# that equal-length edges in world space appear equal-length on screen
+# and that the pitch boundary forms a proper parallelogram (not a skewed shape).
+_SCALE  = 0.46
+_COS30  = math.cos(math.radians(30)) * _SCALE   # ≈ 0.3985
+_SIN30  = math.sin(math.radians(30)) * _SCALE   # ≈ 0.2300
+ISO_CX  = SCR_W // 2
+ISO_CY  = 490
+ISO_VZ  = 1.10
 
 def w2s(wx, wy, wz=0.0):
-    sx = (wx - W_MX)*ISO_SX - (wy - W_MY)*ISO_SX + ISO_CX
-    sy = (wx - W_MX)*ISO_SY + (wy - W_MY)*ISO_SY - wz*ISO_VZ + ISO_CY
+    sx = (wx - W_MX) * _COS30 - (wy - W_MY) * _COS30 + ISO_CX
+    sy = (wx - W_MX) * _SIN30 + (wy - W_MY) * _SIN30 - wz * ISO_VZ + ISO_CY
     return int(sx), int(sy)
 
 # ── Physics ──────────────────────────────────────────────────────
