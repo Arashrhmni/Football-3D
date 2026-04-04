@@ -18,7 +18,13 @@ OUT_L = OUT_R = OUT_T = OUT_B = 90   # run-off border
 
 # ── Screen ───────────────────────────────────────────────────────
 SCR_W, SCR_H = 1280, 800
-FPS           = 60
+FPS = 60
+
+# ── Match timing ─────────────────────────────────────────────────
+# 3 real minutes per half → 6 real minutes total = 90 game-minutes
+REAL_SECS_PER_HALF    = 180                          # 3 min real time
+HALF_FRAMES           = REAL_SECS_PER_HALF * FPS     # frames per half
+MATCH_FRAMES          = HALF_FRAMES * 2              # total frames
 
 # ── Isometric projection ─────────────────────────────────────────
 # Standard dimetric (cabinet) projection:

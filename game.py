@@ -22,7 +22,7 @@ from constants import (
     GOAL_TOP, GOAL_BOT, BALL_R, PLAYER_R,
     PLAYER_SPD, SPRINT_MULT, PASS_SPD, CROSS_SPD, SHOOT_SPD,
     CONTROL_R, TACKLE_R,
-    FORM,
+    FORM, HALF_FRAMES, MATCH_FRAMES,
     DB_THROW_A, DB_THROW_B, DB_GK_A, DB_GK_B,
     DB_CORNER_A, DB_CORNER_B, DB_KICK_A, DB_KICK_B,
     BAR_BLUE, OUT_L, OUT_R, OUT_T, OUT_B,
@@ -44,8 +44,13 @@ class Game:
         self.f_num  = pygame.font.SysFont("Arial", 9, bold=True)
 
         self.score      = [0, 0]
-        self.match_time = 0
+        self.match_time = 0      # frames elapsed this half
+        self.half       = 1      # 1 = first half, 2 = second half
         self.msgs       = []
+
+        # Match state: 'playing' | 'half_time' | 'full_time'
+        self.match_state      = 'playing'
+        self.half_time_timer  = 0   # countdown during half-time pause
 
         # Dead-ball
         self.dead         = None
@@ -112,6 +117,45 @@ class Game:
         kicker.wy = float(W_MY)
         self.ball.owner = kicker
         self.ball.last_toucher = kicker
+
+    def _swap_sides(self):
+        """Mirror every player's home position to the other half for the second half."""
+        for p in self.ta + self.tb:
+            # Mirror x: new_home_x = W_W - old_home_x
+            p.home_x = W_W - p.home_x
+            # y stays the same (symmetric pitch)
+        # After swapping, team A now attacks left, team B attacks right.
+        # We also flip their facing directions.
+        for p in self.ta:
+            p.fdx = -1.0   # now faces left (toward B's original goal)
+        for p in self.tb:
+            p.fdx = 1.0    # now faces right
+
+    def _start_half_time(self):
+        """Pause for half-time break then start second half."""
+        self.match_state     = 'half_time'
+        self.half_time_timer = FPS * 5   # 5 second half-time pause
+        self.ball.owner = None
+        self.ball.vx = self.ball.vy = self.ball.vz = 0.0
+        self.msg("HALF TIME!", (255, 230, 0))
+
+    def _start_second_half(self):
+        """Swap sides and kick off second half. B kicks off."""
+        self.half       = 2
+        self.match_time = 0
+        self.match_state = 'playing'
+        self._swap_sides()
+        self._kickoff('B')   # team that conceded kicks off (convention: other team)
+        self.msg("SECOND HALF — KICK OFF!", (255, 230, 0))
+
+    def _start_full_time(self):
+        self.match_state = 'full_time'
+        if self.score[0] > self.score[1]:
+            self.msg("FULL TIME!  BARCELONA WIN!", BAR_BLUE)
+        elif self.score[1] > self.score[0]:
+            self.msg("FULL TIME!  REAL MADRID WIN!", (215, 215, 215))
+        else:
+            self.msg("FULL TIME!  IT'S A DRAW!", (255, 230, 0))
 
     def msg(self, txt, col=(255, 255, 255)):
         self.msgs.append([txt, col, 220])
@@ -565,23 +609,48 @@ class Game:
     def run(self):
         while True:
             self.clock.tick(FPS)
-            self.match_time += 1
 
             self._handle_events()
+
+            # ── Full time: just show result screen, wait for ESC ──
+            if self.match_state == 'full_time':
+                self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
+                self._draw_scene()
+                self._hud.draw(self)
+                pygame.display.flip()
+                continue
+
+            # ── Half-time pause ───────────────────────────────────
+            if self.match_state == 'half_time':
+                self.half_time_timer -= 1
+                self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
+                self._draw_scene()
+                self._hud.draw(self)
+                pygame.display.flip()
+                if self.half_time_timer <= 0:
+                    self._start_second_half()
+                continue
+
+            # ── Normal play ───────────────────────────────────────
             self._handle_input()
+            self.match_time += 1
+
+            # Check for end of half
+            if self.match_time >= HALF_FRAMES:
+                if self.half == 1:
+                    self._start_half_time()
+                    continue
+                else:
+                    self._start_full_time()
+                    continue
 
             if self.kickoff_freeze > 0:
-                # Decrement freeze counter; NO AI runs, NO physics, just draw
                 self.kickoff_freeze -= 1
 
             elif not self.dead:
-                # GK stuck fix
                 self._update_gk_logic()
-
-                # Throw-in force pass (ball frozen, auto-passes after timer)
                 self._update_throw_in_pass()
 
-                # AI only runs when not in a throw-in pause
                 if not self.throw_must_pass:
                     cpu_ai(self.tb, self.ta, self.ball)
                     cpu_attacking_shape(self.tb, self.ball)
@@ -591,8 +660,6 @@ class Game:
                 self._check_goals()
                 self._check_out()
 
-                # Auto-collect loose ball — but NOT during a throw-in
-                # (ball has no owner but must stay frozen until the pass fires)
                 if not self.throw_must_pass and self.ball.owner is None and self.ball.wz < 11:
                     all_p = self.ta + self.tb
                     all_p.sort(key=lambda p: d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
@@ -606,7 +673,6 @@ class Game:
                             elif p is not self.sel:
                                 self._auto_switch(p)
                             break
-
             else:
                 self._update_dead()
 
