@@ -106,6 +106,82 @@ HAIR_A     = ( 38, 28, 18)
 SKIN_B     = (212,176,136)
 HAIR_B     = ( 58, 44, 20)
 
+# Bayern Munich
+BAY_RED    = (220,  16,  28)
+BAY_WHITE  = (255, 255, 255)
+BAY_SHORTS = (220,  16,  28)
+BAY_SOCKS  = (220,  16,  28)
+
+# Manchester City
+MCI_BLUE   = ( 97, 195, 238)
+MCI_WHITE  = (255, 255, 255)
+MCI_SHORTS = ( 97, 195, 238)
+MCI_SOCKS  = ( 97, 195, 238)
+
+# ── Team registry ─────────────────────────────────────────────────
+# Each entry carries display info (for the menu) and kit colours (for player.py).
+TEAMS = {
+    'barcelona': {
+        'name':    'Barcelona',
+        'country': 'Spain',
+        'shirt1':  BAR_BLUE,
+        'shirt2':  BAR_RED,
+        'shorts':  BAR_SHORTS,
+        'socks':   BAR_SOCKS,
+        'gk':      GK_A,
+        'skin':    SKIN_A,
+        'hair':    HAIR_A,
+        'num_col': (255, 255, 255),
+        'hud_col': BAR_BLUE,
+        'stripe':  True,          # blaugrana vertical stripes
+        'stripe_cols': [BAR_BLUE, BAR_RED, BAR_BLUE],
+    },
+    'real_madrid': {
+        'name':    'Real Madrid',
+        'country': 'Spain',
+        'shirt1':  RMA_SHIRT,
+        'shirt2':  RMA_SHIRT,
+        'shorts':  RMA_SHORTS,
+        'socks':   RMA_SOCKS,
+        'gk':      GK_B,
+        'skin':    SKIN_B,
+        'hair':    HAIR_B,
+        'num_col': (30, 30, 30),
+        'hud_col': (215, 215, 215),
+        'stripe':  False,
+        'gold_border': True,      # white shirt with gold border
+    },
+    'bayern': {
+        'name':    'Bayern Munich',
+        'country': 'Germany',
+        'shirt1':  BAY_RED,
+        'shirt2':  BAY_RED,
+        'shorts':  BAY_SHORTS,
+        'socks':   BAY_SOCKS,
+        'gk':      (255, 210, 0),
+        'skin':    SKIN_A,
+        'hair':    HAIR_A,
+        'num_col': (255, 255, 255),
+        'hud_col': BAY_RED,
+        'stripe':  False,
+    },
+    'man_city': {
+        'name':    'Man City',
+        'country': 'England',
+        'shirt1':  MCI_BLUE,
+        'shirt2':  MCI_WHITE,
+        'shorts':  MCI_SHORTS,
+        'socks':   MCI_SOCKS,
+        'gk':      (255, 140, 0),
+        'skin':    SKIN_B,
+        'hair':    (20, 14, 8),
+        'num_col': (255, 255, 255),
+        'hud_col': MCI_BLUE,
+        'stripe':  False,
+        'half_half': True,        # left-right split shirt
+    },
+}
+
 # ── Formation 4-3-3 (rel x 0→1 from own goal, rel y 0→1 top→bot)
 FORM = [
     (0.055, 0.50),   # 0  GK

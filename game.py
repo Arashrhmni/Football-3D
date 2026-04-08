@@ -26,22 +26,50 @@ from constants import (
     DB_THROW_A, DB_THROW_B, DB_GK_A, DB_GK_B,
     DB_CORNER_A, DB_CORNER_B, DB_KICK_A, DB_KICK_B,
     BAR_BLUE, OUT_L, OUT_R, OUT_T, OUT_B,
+    TEAMS,
     d2, n2, clamp, w2s
 )
 from ball   import Ball
-from player import Player
+from player import Player, set_kits
 from pitch  import bake_pitch
 from ai     import best_pass_target, team_a_support, cpu_ai, cpu_attacking_shape
 from hud    import HUD
 
 
 class Game:
-    def __init__(self):
-        pygame.init()
-        self.screen = pygame.display.set_mode((SCR_W, SCR_H))
-        pygame.display.set_caption("Football 3D — Barcelona vs Real Madrid")
-        self.clock  = pygame.time.Clock()
+    def __init__(self, screen, clock, team_a_key='barcelona', team_b_key='real_madrid'):
+        self.screen = screen
+        self.clock  = clock
         self.f_num  = pygame.font.SysFont("Arial", 9, bold=True)
+
+        # Team identity
+        self.team_a_key  = team_a_key
+        self.team_b_key  = team_b_key
+        self.kit_a       = TEAMS[team_a_key]
+        self.kit_b       = TEAMS[team_b_key]
+        self.team_a_name = self.kit_a['name'].upper()
+        self.team_b_name = self.kit_b['name'].upper()
+        self.team_a_col  = self.kit_a['hud_col']
+        self.team_b_col  = self.kit_b['hud_col']
+
+        # Register kits with player module
+        set_kits(self.kit_a, self.kit_b)
+
+        pygame.display.set_caption(
+            f"Football 3D — {self.kit_a['name']} vs {self.kit_b['name']}"
+        )
+
+        # Build dead-ball labels dynamically
+        self._db_labels = {
+            DB_THROW_A:  f"THROW-IN → {self.team_a_name}",
+            DB_THROW_B:  f"THROW-IN → {self.team_b_name}",
+            DB_GK_A:     f"GOAL KICK → {self.team_a_name}",
+            DB_GK_B:     f"GOAL KICK → {self.team_b_name}",
+            DB_CORNER_A: f"CORNER → {self.team_a_name}",
+            DB_CORNER_B: f"CORNER → {self.team_b_name}",
+            DB_KICK_A:   f"KICK OFF → {self.team_a_name}",
+            DB_KICK_B:   f"KICK OFF → {self.team_b_name}",
+        }
 
         self.score      = [0, 0]
         self.match_time = 0      # frames elapsed this half
@@ -208,9 +236,9 @@ class Game:
     def _start_full_time(self):
         self.match_state = 'full_time'
         if self.score[0] > self.score[1]:
-            self.msg("FULL TIME!  BARCELONA WIN!", BAR_BLUE)
+            self.msg(f"FULL TIME!  {self.team_a_name} WIN!", self.team_a_col)
         elif self.score[1] > self.score[0]:
-            self.msg("FULL TIME!  REAL MADRID WIN!", (215, 215, 215))
+            self.msg(f"FULL TIME!  {self.team_b_name} WIN!", self.team_b_col)
         else:
             self.msg("FULL TIME!  IT'S A DRAW!", (255, 230, 0))
 
@@ -322,7 +350,8 @@ class Game:
             if ev.type == pygame.KEYDOWN:
                 k = ev.key
                 if k == pygame.K_ESCAPE:
-                    pygame.quit(); sys.exit()
+                    self.match_state = 'quit_to_menu'
+                    return
                 if k == pygame.K_p:
                     if self.match_state in ('playing', 'paused'):
                         self._toggle_pause()
@@ -576,10 +605,10 @@ class Game:
             scoring = 'B' if conceding == 'A' else 'A'
             if scoring == 'A':
                 self.score[0] += 1
-                self.msg("⚽  GOAL! — BARCELONA!", BAR_BLUE)
+                self.msg(f"⚽  GOAL! — {self.team_a_name}!", self.team_a_col)
             else:
                 self.score[1] += 1
-                self.msg("⚽  GOAL! — REAL MADRID!", (215,215,215))
+                self.msg(f"⚽  GOAL! — {self.team_b_name}!", self.team_b_col)
             self._start_dead(self._restart_kind_for_team('kickoff', conceding), None)
             return
 
@@ -588,10 +617,10 @@ class Game:
             scoring = 'B' if conceding == 'A' else 'A'
             if scoring == 'A':
                 self.score[0] += 1
-                self.msg("⚽  GOAL! — BARCELONA!", BAR_BLUE)
+                self.msg(f"⚽  GOAL! — {self.team_a_name}!", self.team_a_col)
             else:
                 self.score[1] += 1
-                self.msg("⚽  GOAL! — REAL MADRID!", (215,215,215))
+                self.msg(f"⚽  GOAL! — {self.team_b_name}!", self.team_b_col)
             self._start_dead(self._restart_kind_for_team('kickoff', conceding), None)
 
     # ── Out of bounds ─────────────────────────────────────────────
@@ -739,6 +768,10 @@ class Game:
             self.clock.tick(FPS)
 
             self._handle_events()
+
+            # ── Return to menu ────────────────────────────────────
+            if self.match_state == 'quit_to_menu':
+                return 'menu'
 
             # ── Full time: just show result screen, wait for input ──
             if self.match_state == 'full_time':

@@ -4,11 +4,17 @@ import math
 import random
 from constants import (
     PLAYER_R, AI_REACT, OUT_L, OUT_R, OUT_T, OUT_B,
-    BAR_BLUE, BAR_RED, BAR_SHORTS, BAR_SOCKS,
-    RMA_SHIRT, RMA_GOLD, RMA_SHORTS, RMA_SOCKS,
-    GK_A, GK_B, SKIN_A, HAIR_A, SKIN_B, HAIR_B,
     W_W, W_H, d2, n2, clamp, w2s
 )
+
+# Module-level kit config – set by Game before building teams
+_KIT_A = None   # TEAMS dict entry for team A
+_KIT_B = None   # TEAMS dict entry for team B
+
+def set_kits(kit_a, kit_b):
+    global _KIT_A, _KIT_B
+    _KIT_A = kit_a
+    _KIT_B = kit_b
 
 
 class Player:
@@ -34,14 +40,15 @@ class Player:
 
     # ── Kit ──────────────────────────────────────────────────────
     def _kit(self):
-        if self.team == 'A':
-            if self.is_keeper:
-                return GK_A, GK_A, (50, 50, 50), SKIN_A, HAIR_A
-            return BAR_BLUE, BAR_SHORTS, BAR_SOCKS, SKIN_A, HAIR_A
-        else:
-            if self.is_keeper:
-                return GK_B, (80, 80, 80), (80, 80, 80), SKIN_B, HAIR_B
-            return RMA_SHIRT, RMA_SHORTS, RMA_SOCKS, SKIN_B, HAIR_B
+        cfg = _KIT_A if self.team == 'A' else _KIT_B
+        if cfg is None:
+            # hard fallback (should never happen)
+            return (0, 82, 170), (0, 82, 170), (0, 82, 170), (222, 182, 142), (38, 28, 18)
+        if self.is_keeper:
+            gk = cfg['gk']
+            dark = tuple(max(0, c - 40) for c in gk)
+            return gk, dark, dark, cfg['skin'], cfg['hair']
+        return cfg['shirt1'], cfg['shorts'], cfg['socks'], cfg['skin'], cfg['hair']
 
     # ── Movement ─────────────────────────────────────────────────
     def move_toward(self, tx, ty, spd):
@@ -64,6 +71,7 @@ class Player:
     # ── Draw ─────────────────────────────────────────────────────
     def draw(self, surf, ball, fnt):
         shirt, shorts, socks, skin, hair = self._kit()
+        cfg = (_KIT_A if self.team == 'A' else _KIT_B) or {}
         has_ball = (ball.owner is self)
         moving   = math.hypot(self.vx, self.vy) > 0.2
         if moving:
@@ -88,7 +96,7 @@ class Player:
             lx = bx + int(self.fdx*l_fwd) + int(self.fdy*sign*l_off)
             ly = by + int(self.fdy*l_fwd) - int(self.fdx*sign*l_off) + PLAYER_R + int(lb)
             pygame.draw.line(surf, socks, (lx, by+PLAYER_R-3), (lx, ly-foot_r+1), 5)
-            bcol = (25, 25, 25) if self.team == 'A' else (210, 210, 210)
+            bcol = tuple(max(0, c - 60) for c in (cfg.get('shorts', (0, 0, 0)) if not self.is_keeper else (30, 30, 30)))
             pygame.draw.circle(surf, bcol, (lx, ly), foot_r)
             pygame.draw.circle(surf, (0, 0, 0), (lx, ly), foot_r, 1)
 
@@ -102,26 +110,42 @@ class Player:
         torso = (bx-tw, t_y, tw*2, th)
         pygame.draw.ellipse(surf, shirt, torso)
 
-        if self.team == 'A' and not self.is_keeper:
-            sw2 = max(4, tw//3)
-            for si, sc in enumerate([BAR_BLUE, BAR_RED, BAR_BLUE]):
-                rx   = bx - tw + si*sw2*2
-                clip = pygame.Rect(rx, t_y, sw2*2, th)
+        if not self.is_keeper and cfg.get('stripe'):
+            sw2 = max(4, tw // 3)
+            cols = cfg.get('stripe_cols', [shirt, cfg.get('shirt2', shirt), shirt])
+            for si, sc in enumerate(cols):
+                rx   = bx - tw + si * sw2 * 2
+                clip = pygame.Rect(rx, t_y, sw2 * 2, th)
                 inter = pygame.Rect(*torso).clip(clip)
                 if inter.w > 0 and inter.h > 0:
                     sub = pygame.Surface((inter.w, inter.h), pygame.SRCALPHA)
                     sub.fill(sc)
                     surf.blit(sub, (inter.x, inter.y))
-            pygame.draw.ellipse(surf, tuple(max(0,c-28) for c in shirt), torso, 2)
-        elif self.team == 'B' and not self.is_keeper:
-            pygame.draw.ellipse(surf, RMA_SHIRT, torso)
+            pygame.draw.ellipse(surf, tuple(max(0, c - 28) for c in shirt), torso, 2)
+        elif not self.is_keeper and cfg.get('half_half'):
+            # Left-right two-tone split (Man City)
+            s1 = cfg['shirt1']
+            s2 = cfg.get('shirt2', shirt)
+            left_r  = pygame.Rect(bx - tw, t_y, tw, th)
+            right_r = pygame.Rect(bx,      t_y, tw, th)
+            for half_r, col in ((left_r, s1), (right_r, s2)):
+                inter = pygame.Rect(*torso).clip(half_r)
+                if inter.w > 0 and inter.h > 0:
+                    sub = pygame.Surface((inter.w, inter.h), pygame.SRCALPHA)
+                    sub.fill(col)
+                    surf.blit(sub, (inter.x, inter.y))
+            pygame.draw.ellipse(surf, tuple(max(0, c - 20) for c in s1), torso, 2)
+        elif not self.is_keeper and cfg.get('gold_border'):
+            # Plain white with gold trim (Real Madrid)
+            pygame.draw.ellipse(surf, shirt, torso)
+            from constants import RMA_GOLD
             pygame.draw.ellipse(surf, RMA_GOLD, torso, 2)
         else:
-            pygame.draw.ellipse(surf, tuple(max(0,c-20) for c in shirt), torso, 2)
+            pygame.draw.ellipse(surf, tuple(max(0, c - 20) for c in shirt), torso, 2)
 
         # Jersey number
-        ns = fnt.render(str(self.num), True,
-                        (255,255,255) if self.team == 'A' else (30,30,30))
+        num_col = cfg.get('num_col', (255, 255, 255)) if not self.is_keeper else (255, 255, 255)
+        ns = fnt.render(str(self.num), True, num_col)
         surf.blit(ns, (bx - ns.get_width()//2, t_y + th//2 - ns.get_height()//2))
 
         # Arms (attached, not floating)
