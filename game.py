@@ -112,6 +112,32 @@ class Game:
         elif self.match_state == 'paused':
             self.match_state = 'playing'
 
+    def _team_defends_left(self, team):
+        if team == 'A':
+            return self.ta[0].home_x < self.tb[0].home_x
+        return self.tb[0].home_x < self.ta[0].home_x
+
+    def _team_attacks_right(self, team):
+        return self._team_defends_left(team)
+
+    def _own_goal_x(self, team):
+        return 0.0 if self._team_defends_left(team) else float(W_W)
+
+    def _opp_goal_x(self, team):
+        return float(W_W) if self._team_attacks_right(team) else 0.0
+
+    def _restart_kind_for_team(self, prefix, team):
+        mapping = {
+            ('goal_kick', 'A'): DB_GK_A,
+            ('goal_kick', 'B'): DB_GK_B,
+            ('corner', 'A'): DB_CORNER_A,
+            ('corner', 'B'): DB_CORNER_B,
+            ('kickoff', 'A'): DB_KICK_A,
+            ('kickoff', 'B'): DB_KICK_B,
+        }
+        return mapping[(prefix, team)]
+
+
     # ── Team setup ────────────────────────────────────────────────
     def _build_teams(self):
         self.ta, self.tb = [], []
@@ -368,7 +394,7 @@ class Game:
             return
 
         candidates = [p for p in self.ta if p is not carrier and not p.is_keeper]
-        attack_right = True
+        attack_right = self._team_attacks_right('A')
         if attack_right:
             candidates = [p for p in candidates if (p.wx - carrier.wx) > 40]
         else:
@@ -384,7 +410,10 @@ class Game:
             return forward * 1.7 + opp_d * 0.35 - dd * 0.04
 
         tgt = max(candidates, key=score)
-        lead_x = clamp(tgt.wx + max(18, tgt.vx * 18 + 22), 10, W_W - 10)
+        if attack_right:
+            lead_x = clamp(tgt.wx + max(18, tgt.vx * 18 + 22), 10, W_W - 10)
+        else:
+            lead_x = clamp(tgt.wx - max(18, abs(tgt.vx) * 18 + 22), 10, W_W - 10)
         lead_y = clamp(tgt.wy + tgt.vy * 16, 10, W_H - 10)
         self.ball.last_toucher = carrier
         self.ball.kick(lead_x, lead_y, THROUGH_PASS_SPD, 1.4)
@@ -394,8 +423,9 @@ class Game:
     def _cross(self, carrier):
         tgt_y = GOAL_TOP+20 if carrier.wy > W_MY else GOAL_BOT-20
         tgt_y += random.randint(-18, 18)
+        goal_x = self._opp_goal_x(carrier.team)
         self.ball.release()
-        bx, by = n2(W_W - carrier.wx, tgt_y - carrier.wy)
+        bx, by = n2(goal_x - carrier.wx, tgt_y - carrier.wy)
         self.ball.vx = bx * CROSS_SPD
         self.ball.vy = by * CROSS_SPD
         self.ball.vz = 9.0
@@ -417,7 +447,8 @@ class Game:
 
         # Inaccuracy decreases with more power
         inac = clamp((1.0 - power) * 0.22, 0, 0.22)
-        bx, by = n2(W_W - c.wx, gy - c.wy)
+        goal_x = self._opp_goal_x(c.team)
+        bx, by = n2(goal_x - c.wx, gy - c.wy)
         bx += random.uniform(-inac, inac)
         by += random.uniform(-inac, inac)
         bx, by = n2(bx, by)
@@ -539,15 +570,29 @@ class Game:
         b = self.ball
         if b.wz > 26:
             return
+
         if b.wx <= -BALL_R and GOAL_TOP <= b.wy <= GOAL_BOT:
-            self.score[1] += 1
-            self.msg("⚽  GOAL! — REAL MADRID!", (215,215,215))
-            self._start_dead(DB_KICK_A, None)
+            conceding = 'A' if self._team_defends_left('A') else 'B'
+            scoring = 'B' if conceding == 'A' else 'A'
+            if scoring == 'A':
+                self.score[0] += 1
+                self.msg("⚽  GOAL! — BARCELONA!", BAR_BLUE)
+            else:
+                self.score[1] += 1
+                self.msg("⚽  GOAL! — REAL MADRID!", (215,215,215))
+            self._start_dead(self._restart_kind_for_team('kickoff', conceding), None)
             return
+
         if b.wx >= W_W + BALL_R and GOAL_TOP <= b.wy <= GOAL_BOT:
-            self.score[0] += 1
-            self.msg("⚽  GOAL! — BARCELONA!", BAR_BLUE)
-            self._start_dead(DB_KICK_B, None)
+            conceding = 'A' if not self._team_defends_left('A') else 'B'
+            scoring = 'B' if conceding == 'A' else 'A'
+            if scoring == 'A':
+                self.score[0] += 1
+                self.msg("⚽  GOAL! — BARCELONA!", BAR_BLUE)
+            else:
+                self.score[1] += 1
+                self.msg("⚽  GOAL! — REAL MADRID!", (215,215,215))
+            self._start_dead(self._restart_kind_for_team('kickoff', conceding), None)
 
     # ── Out of bounds ─────────────────────────────────────────────
     def _check_out(self):
@@ -564,27 +609,32 @@ class Game:
             self._start_dead(kind, (tx, ty))
             return
 
-        # Left byline (B's goal end) — not inside goal
+        # Left byline (current left-side goal line) — not inside goal
         if b.wx < -BALL_R and not (GOAL_TOP <= b.wy <= GOAL_BOT):
-            # A attacked, B defended → who last touched?
-            # If A last touched: A shot/passed it out → goal kick for B
-            # If B last touched: B put it behind their own line → corner for A
-            if lt and lt.team == 'A':
-                self._start_dead(DB_GK_B, (34, clamp(b.wy, 38, W_H-38)))
-            else:
+            defending = 'A' if self._team_defends_left('A') else 'B'
+            attacking = 'B' if defending == 'A' else 'A'
+            if lt and lt.team == defending:
                 cy = 10 if b.wy < W_MY else W_H - 10
-                self._start_dead(DB_CORNER_A, (8, cy))
+                self._start_dead(self._restart_kind_for_team('corner', attacking), (8, cy))
+            else:
+                self._start_dead(
+                    self._restart_kind_for_team('goal_kick', defending),
+                    (34, clamp(b.wy, 38, W_H-38))
+                )
             return
 
-        # Right byline (A's goal end) — not inside goal
+        # Right byline (current right-side goal line) — not inside goal
         if b.wx > W_W + BALL_R and not (GOAL_TOP <= b.wy <= GOAL_BOT):
-            # If B last touched → shot/passed out → goal kick for A
-            # If A last touched → A put it behind their own line → corner for B
-            if lt and lt.team == 'B':
-                self._start_dead(DB_GK_A, (W_W-34, clamp(b.wy, 38, W_H-38)))
-            else:
+            defending = 'A' if not self._team_defends_left('A') else 'B'
+            attacking = 'B' if defending == 'A' else 'A'
+            if lt and lt.team == defending:
                 cy = 10 if b.wy < W_MY else W_H - 10
-                self._start_dead(DB_CORNER_B, (W_W-8, cy))
+                self._start_dead(self._restart_kind_for_team('corner', attacking), (W_W-8, cy))
+            else:
+                self._start_dead(
+                    self._restart_kind_for_team('goal_kick', defending),
+                    (W_W-34, clamp(b.wy, 38, W_H-38))
+                )
 
     # ── Dead-ball ─────────────────────────────────────────────────
     def _start_dead(self, kind, pos):
@@ -646,7 +696,7 @@ class Game:
             self.ball.wx, self.ball.wy, self.ball.wz = float(bx), float(by), 0.0
             tgt_y  = GOAL_TOP+22 if by < W_MY else GOAL_BOT-22
             tgt_y += random.randint(-16, 16)
-            tgt_x  = W_W if kind == DB_CORNER_A else 0.0
+            tgt_x  = self._opp_goal_x('A' if kind == DB_CORNER_A else 'B')
             self.ball.kick(tgt_x, tgt_y, CROSS_SPD, 9.5)
             self.ball.last_toucher = tp
             if tp.throw_anim: tp.throw_anim = 0

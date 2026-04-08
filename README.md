@@ -34,3 +34,10 @@ This version stays on Pygame instead of mixing in Arcade, Ren'Py, or Panda3D. Th
 pip install -r requirements.txt
 python main.py
 ```
+
+
+## April 2026 update
+
+- Fixed the byline restart bug so a shot that goes out behind the defending team now becomes a **goal kick** instead of the wrong corner.
+- Restart logic is now based on the teams' **current defended goals**, so it stays correct after side swaps too.
+- Added a `panda3d_foundation/` folder with a small 3D migration starter. The working match is still the Pygame version; the Panda3D folder is the first step toward a real full-3D port.
