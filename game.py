@@ -21,7 +21,7 @@ from constants import (
     SCR_W, SCR_H, FPS, W_W, W_H, W_MX, W_MY,
     GOAL_TOP, GOAL_BOT, BALL_R, PLAYER_R,
     PLAYER_SPD, SPRINT_MULT, PASS_SPD, CROSS_SPD, SHOOT_SPD,
-    CONTROL_R, TACKLE_R,
+    CONTROL_R, TACKLE_R, THROUGH_PASS_SPD, STAMINA_DRAIN, STAMINA_REGEN,
     FORM, HALF_FRAMES, MATCH_FRAMES,
     DB_THROW_A, DB_THROW_B, DB_GK_A, DB_GK_B,
     DB_CORNER_A, DB_CORNER_B, DB_KICK_A, DB_KICK_B,
@@ -48,7 +48,7 @@ class Game:
         self.half       = 1      # 1 = first half, 2 = second half
         self.msgs       = []
 
-        # Match state: 'playing' | 'half_time' | 'full_time'
+        # Match state: 'playing' | 'paused' | 'half_time' | 'full_time'
         self.match_state      = 'playing'
         self.half_time_timer  = 0   # countdown during half-time pause
 
@@ -80,6 +80,37 @@ class Game:
 
         self._pitch = bake_pitch()
         self._hud   = HUD(self.screen)
+
+    def _restart_match(self):
+        self.score      = [0, 0]
+        self.match_time = 0
+        self.half       = 1
+        self.msgs       = []
+        self.match_state      = 'playing'
+        self.half_time_timer  = 0
+        self.dead         = None
+        self.dead_pos     = (W_MX, W_MY)
+        self.dead_timer   = 0
+        self.throw_player = None
+        self.throw_must_pass     = False
+        self._throw_pass_thrower = None
+        self._throw_pass_timer   = 0
+        self.kickoff_freeze = FPS * 2
+        self.kickoff_side   = 'A'
+        self.charging     = False
+        self.charge       = 0.0
+        self._shot_queued = False
+        self.gk_hold_timer = 0
+        self.ball = Ball()
+        self._build_teams()
+        self._kickoff('A')
+        self.msg("NEW MATCH!", (255, 230, 0))
+
+    def _toggle_pause(self):
+        if self.match_state == 'playing':
+            self.match_state = 'paused'
+        elif self.match_state == 'paused':
+            self.match_state = 'playing'
 
     # ── Team setup ────────────────────────────────────────────────
     def _build_teams(self):
@@ -193,30 +224,33 @@ class Game:
     def _handle_input(self):
         """Process held keys every frame. ESC / TAB / SPACE handled in events."""
 
-        # FREEZE: no input at all during kickoff countdown or dead ball
+        if self.match_state != 'playing':
+            return
+
         if self.kickoff_freeze > 0 or self.dead:
             self.charging = False
             self.charge   = 0.0
+            self.sel.stamina = min(1.0, self.sel.stamina + STAMINA_REGEN)
             return
 
-        # Throw-in active: thrower is locked in place, must only pass
-        # (movement keys do nothing for the thrower)
         if self.throw_must_pass:
-            # The thrower auto-passes after a short moment; nothing for human to do
+            self.sel.stamina = min(1.0, self.sel.stamina + STAMINA_REGEN)
             return
 
         keys = pygame.key.get_pressed()
-        spd  = PLAYER_SPD * (SPRINT_MULT if keys[pygame.K_z] else 1.0)
         p    = self.sel
 
-        # Movement
         dx, dy = 0.0, 0.0
         if keys[pygame.K_LEFT]  or keys[pygame.K_a]: dx -= 1
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx += 1
         if keys[pygame.K_UP]    or keys[pygame.K_w]: dy -= 1
         if keys[pygame.K_DOWN]  or keys[pygame.K_s]: dy += 1
 
-        if dx or dy:
+        moving = bool(dx or dy)
+        sprinting = moving and keys[pygame.K_z] and p.stamina > 0.08
+        spd  = PLAYER_SPD * (SPRINT_MULT if sprinting else 1.0)
+
+        if moving:
             nx, ny = n2(dx, dy)
             p.vx, p.vy   = nx*spd, ny*spd
             p.fdx, p.fdy = nx, ny
@@ -226,8 +260,12 @@ class Game:
             p.vx *= 0.55
             p.vy *= 0.55
 
-        # Shoot charge — works whenever ball owner is on team A
-        # (no restriction on position or distance to goal)
+        if sprinting:
+            p.stamina = max(0.0, p.stamina - STAMINA_DRAIN)
+        else:
+            regen = STAMINA_REGEN * (1.4 if not moving else 1.0)
+            p.stamina = min(1.0, p.stamina + regen)
+
         shooting = (keys[pygame.K_f] or
                     keys[pygame.K_LSHIFT] or
                     keys[pygame.K_RSHIFT])
@@ -238,14 +276,11 @@ class Game:
                 self.charge   = min(1.0, self.charge + 0.026)
         else:
             if self.charging:
-                # Release: fire the shot at whatever power was built up
-                # Minimum power 0.3 so even a tap does something
                 if self.ball.owner and self.ball.owner.team == 'A':
                     self._shoot(max(0.30, self.charge))
             self.charging = False
             self.charge   = 0.0
 
-        # Auto-collect loose ball
         if self.ball.owner is None and self.ball.wz < 10:
             if d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)) < CONTROL_R:
                 self.ball.owner = p
@@ -262,8 +297,21 @@ class Game:
                 k = ev.key
                 if k == pygame.K_ESCAPE:
                     pygame.quit(); sys.exit()
+                if k == pygame.K_p:
+                    if self.match_state in ('playing', 'paused'):
+                        self._toggle_pause()
+                    continue
+                if k == pygame.K_r:
+                    if self.match_state in ('paused', 'full_time'):
+                        self._restart_match()
+                    continue
+                if k == pygame.K_F11:
+                    pygame.display.toggle_fullscreen()
+                    continue
 
-                # Ignore all input during freeze or dead ball (except ESC)
+                if self.match_state != 'playing':
+                    continue
+
                 if self.kickoff_freeze > 0 or self.dead:
                     continue
 
@@ -272,6 +320,9 @@ class Game:
                 elif k == pygame.K_SPACE:
                     if self.ball.owner and self.ball.owner.team == 'A':
                         self._pass()
+                elif k == pygame.K_q:
+                    if self.ball.owner and self.ball.owner.team == 'A':
+                        self._through_pass()
                 elif k == pygame.K_c:
                     if self.ball.owner and self.ball.owner.team == 'A':
                         if self._near_byline(self.ball.owner):
@@ -280,7 +331,6 @@ class Game:
                             self._pass()
                 elif k == pygame.K_x:
                     self._tackle()
-                # All other keys: safe no-op
 
     # ── Player actions ────────────────────────────────────────────
     def _switch(self):
@@ -306,11 +356,39 @@ class Game:
         tgt = best_pass_target(carrier, self.ta, self.tb)
         if not tgt:
             return
-        # Lead pass ahead of receiver's movement
         lead_x = clamp(tgt.wx + tgt.vx * 10, 10, W_W - 10)
         lead_y = clamp(tgt.wy + tgt.vy * 10, 10, W_H - 10)
         self.ball.last_toucher = carrier
         self.ball.kick(lead_x, lead_y, PASS_SPD, 2.0)
+        self._auto_switch(tgt)
+
+    def _through_pass(self):
+        carrier = self.ball.owner
+        if not carrier or carrier.team != 'A':
+            return
+
+        candidates = [p for p in self.ta if p is not carrier and not p.is_keeper]
+        attack_right = True
+        if attack_right:
+            candidates = [p for p in candidates if (p.wx - carrier.wx) > 40]
+        else:
+            candidates = [p for p in candidates if (carrier.wx - p.wx) > 40]
+        if not candidates:
+            self._pass()
+            return
+
+        def score(p):
+            dd = d2((carrier.wx, carrier.wy), (p.wx, p.wy))
+            opp_d = min((d2((q.wx, q.wy), (p.wx, p.wy)) for q in self.tb), default=999)
+            forward = p.wx - carrier.wx
+            return forward * 1.7 + opp_d * 0.35 - dd * 0.04
+
+        tgt = max(candidates, key=score)
+        lead_x = clamp(tgt.wx + max(18, tgt.vx * 18 + 22), 10, W_W - 10)
+        lead_y = clamp(tgt.wy + tgt.vy * 16, 10, W_H - 10)
+        self.ball.last_toucher = carrier
+        self.ball.kick(lead_x, lead_y, THROUGH_PASS_SPD, 1.4)
+        self.msg("THROUGH PASS!", (120, 230, 255))
         self._auto_switch(tgt)
 
     def _cross(self, carrier):
@@ -612,9 +690,15 @@ class Game:
 
             self._handle_events()
 
-            # ── Full time: just show result screen, wait for ESC ──
+            # ── Full time: just show result screen, wait for input ──
             if self.match_state == 'full_time':
                 self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
+                self._draw_scene()
+                self._hud.draw(self)
+                pygame.display.flip()
+                continue
+
+            if self.match_state == 'paused':
                 self._draw_scene()
                 self._hud.draw(self)
                 pygame.display.flip()

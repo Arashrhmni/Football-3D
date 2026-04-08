@@ -55,8 +55,13 @@ BALL_GRAV   = 0.52
 PASS_SPD    = 11.0
 CROSS_SPD   = 13.0
 SHOOT_SPD   = 19.0
+THROUGH_PASS_SPD = 13.4
 CONTROL_R   = 21
 TACKLE_R    = 26
+
+# ── Stamina ──────────────────────────────────────────────────────
+STAMINA_DRAIN = 0.0095
+STAMINA_REGEN = 0.0048
 
 # ── AI ───────────────────────────────────────────────────────────
 AI_WALK  = 1.9

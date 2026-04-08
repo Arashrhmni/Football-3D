@@ -1,13 +1,15 @@
 """ball.py – Ball physics and rendering."""
 import pygame
 import math
+from collections import deque
 from constants import (
-    W_MX, W_MY, BALL_R, PLAYER_R, BALL_FRIC, BALL_GRAV, w2s, n2, clamp
+    W_MX, W_MY, BALL_R, PLAYER_R, BALL_FRIC, BALL_GRAV, w2s, n2
 )
 
 
 class Ball:
     def __init__(self):
+        self._trail = deque(maxlen=9)
         self.reset()
 
     def reset(self):
@@ -19,6 +21,7 @@ class Ball:
         self.vz = 0.0
         self.owner        = None   # Player or None
         self.last_toucher = None   # Player or None
+        self._trail.clear()
 
     def spd(self):
         return math.hypot(self.vx, self.vy)
@@ -29,7 +32,10 @@ class Ball:
             self.wx = self.owner.wx + fx * (PLAYER_R + BALL_R + 1)
             self.wy = self.owner.wy + fy * (PLAYER_R + BALL_R + 1)
             self.wz = self.vx = self.vy = self.vz = 0.0
+            self._trail.clear()
             return
+
+        self._trail.appendleft((self.wx, self.wy, self.wz))
 
         self.wx += self.vx
         self.wy += self.vy
@@ -53,6 +59,7 @@ class Ball:
             self.vx = self.owner.vx * 0.22
             self.vy = self.owner.vy * 0.22
             self.owner = None
+            self._trail.clear()
 
     def kick(self, tx, ty, spd, vz_init=2.5):
         """Kick toward world position (tx, ty) with given speed and arc."""
@@ -66,6 +73,16 @@ class Ball:
         gx, gy = w2s(self.wx, self.wy, 0)
         bx, by = w2s(self.wx, self.wy, self.wz)
         sr = BALL_R
+
+        # Motion trail for fast shots / passes
+        if self.owner is None and (self.spd() > 7.0 or self.wz > 2.0):
+            for i, (tx, ty, tz) in enumerate(list(self._trail)[:6], start=1):
+                px, py = w2s(tx, ty, tz)
+                rad = max(2, sr - i//2)
+                trail = pygame.Surface((rad*4, rad*4), pygame.SRCALPHA)
+                alpha = max(25, 125 - i * 18)
+                pygame.draw.circle(trail, (255, 255, 255, alpha), (rad*2, rad*2), rad)
+                surf.blit(trail, (px - rad*2, py - rad*2))
 
         # Ground shadow
         shw = pygame.Surface((sr*5, sr*3), pygame.SRCALPHA)

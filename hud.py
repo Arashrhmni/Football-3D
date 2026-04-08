@@ -1,9 +1,8 @@
 """hud.py – Heads-up display rendering."""
 import pygame
-import math
 from constants import (
     SCR_W, SCR_H, FPS, BAR_BLUE, DB_LABELS,
-    HALF_FRAMES, MATCH_FRAMES
+    HALF_FRAMES, W_W, W_H
 )
 
 
@@ -18,18 +17,14 @@ class HUD:
     def draw(self, game):
         s = game.screen
 
-        # ── Convert frame time to game minutes ───────────────────
-        # Each half = 45 game-minutes = HALF_FRAMES real frames
-        # 1 game-minute = HALF_FRAMES / 45 frames
         frames_per_gmin = HALF_FRAMES / 45.0
-        raw_gmin = game.match_time / frames_per_gmin   # 0–45 within the half
+        raw_gmin = game.match_time / frames_per_gmin
         if game.half == 1:
-            game_min = int(raw_gmin) + 1             # 1–45
+            game_min = int(raw_gmin) + 1
         else:
-            game_min = int(raw_gmin) + 46            # 46–90
+            game_min = int(raw_gmin) + 46
         game_min = min(game_min, 45 if game.half == 1 else 90)
 
-        # ── Scoreboard ────────────────────────────────────────────
         bw = 370; bx = SCR_W//2 - bw//2
         pygame.draw.rect(s, (8,8,8),   (bx, 4, bw, 52), border_radius=10)
         pygame.draw.rect(s, (65,65,65),(bx, 4, bw, 52), 2, border_radius=10)
@@ -42,14 +37,12 @@ class HUD:
         sc = self.f_big.render(f"{game.score[0]}  -  {game.score[1]}", True, (255,255,255))
         s.blit(sc, (SCR_W//2 - sc.get_width()//2, 4))
 
-        # Game clock + half indicator
         half_col = (255,200,0) if game.half == 1 else (0,200,255)
         half_lbl = self.f_hud.render(f"{'1ST' if game.half==1 else '2ND'} HALF", True, half_col)
         clock_lbl = self.f_hud.render(f"{game_min}'", True, (220,220,220))
         s.blit(clock_lbl, (SCR_W//2 - clock_lbl.get_width()//2, 48))
         s.blit(half_lbl,  (SCR_W//2 + clock_lbl.get_width()//2 + 6, 48))
 
-        # ── Half progress bar ─────────────────────────────────────
         bar_w = 300; bar_h = 4
         bar_x = SCR_W//2 - bar_w//2; bar_y = 64
         pygame.draw.rect(s, (40,40,40), (bar_x, bar_y, bar_w, bar_h), border_radius=2)
@@ -58,26 +51,26 @@ class HUD:
         if progress > 0:
             pygame.draw.rect(s, fill_col, (bar_x, bar_y, int(bar_w*progress), bar_h), border_radius=2)
 
-        # ── Controls panel ────────────────────────────────────────
         ctrl = [
             ("WASD/↑↓", "Move"),
             ("Z",        "Sprint"),
             ("SPACE",    "Pass"),
+            ("Q",        "Through pass"),
             ("C",        "Cross (near wing)"),
             ("F/Shift",  "Shoot (hold=power)"),
             ("X",        "Tackle"),
             ("TAB",      "Switch player"),
+            ("P",        "Pause"),
         ]
-        px, py = 8, SCR_H - 136
-        pygame.draw.rect(s, (0,0,0),    (px-4, py-4, 238, 140), border_radius=6)
-        pygame.draw.rect(s, (48,48,48), (px-4, py-4, 238, 140), 1, border_radius=6)
+        px, py = 8, SCR_H - 154
+        pygame.draw.rect(s, (0,0,0),    (px-4, py-4, 238, 158), border_radius=6)
+        pygame.draw.rect(s, (48,48,48), (px-4, py-4, 238, 158), 1, border_radius=6)
         for i, (k, d) in enumerate(ctrl):
             ks = self.f_hud.render(k, True, (255,218,0))
             ds = self.f_hud.render(d, True, (170,170,170))
-            s.blit(ks, (px,    py + i*18))
-            s.blit(ds, (px+86, py + i*18))
+            s.blit(ks, (px,    py + i*16))
+            s.blit(ds, (px+86, py + i*16))
 
-        # ── Shoot power bar ───────────────────────────────────────
         if game.charging:
             bw2, bh = 210, 20
             bx2 = SCR_W//2 - bw2//2; by2 = SCR_H - 58
@@ -89,7 +82,6 @@ class HUD:
             lbl = self.f_hud.render(f"SHOOT  {int(game.charge*100)}%", True, (255,255,255))
             s.blit(lbl, (SCR_W//2 - lbl.get_width()//2, by2-18))
 
-        # ── Dead-ball banner ──────────────────────────────────────
         if game.dead:
             lbl = DB_LABELS.get(game.dead, '')
             ds  = self.f_med.render(lbl, True, (255,225,0))
@@ -100,25 +92,24 @@ class HUD:
             ts = self.f_hud.render(f"Resuming in {cd}s…", True, (150,150,150))
             s.blit(ts, (SCR_W//2 - ts.get_width()//2, SCR_H-27))
 
-        # ── Messages ─────────────────────────────────────────────
         for i, m in enumerate(game.msgs):
             ms = self.f_med.render(m[0], True, m[1])
             ms.set_alpha(min(255, m[2]*3))
             s.blit(ms, (SCR_W//2 - ms.get_width()//2, SCR_H//2 - 110 + i*42))
 
-        # ── Possession indicator ──────────────────────────────────
         if game.ball.owner:
             side = "BARCELONA" if game.ball.owner.team == 'A' else "REAL MADRID"
             col  = BAR_BLUE if game.ball.owner.team == 'A' else (215,215,215)
             ps = self.f_hud.render(f"Ball: {side} #{game.ball.owner.num}", True, col)
             s.blit(ps, (SCR_W//2 - ps.get_width()//2, 72))
 
-        # ── Kickoff whistle overlay ───────────────────────────────
+        self._draw_stamina(game)
+        self._draw_radar(game)
+
         if game.kickoff_freeze > 0:
             msg = self.f_med.render("WHISTLE — KICK OFF!", True, (255,230,0))
             s.blit(msg, (SCR_W//2 - msg.get_width()//2, SCR_H//2 - 20))
 
-        # ── Half-time overlay ─────────────────────────────────────
         if game.match_state == 'half_time':
             self._draw_overlay(s, (0,0,0,160))
             ht = self.f_xl.render("HALF TIME", True, (255,220,0))
@@ -131,7 +122,6 @@ class HUD:
             ts2 = self.f_hud.render(f"2nd half starts in {cd2}s…", True, (180,180,180))
             s.blit(ts2, (SCR_W//2 - ts2.get_width()//2, SCR_H//2 + 55))
 
-        # ── Full-time overlay ─────────────────────────────────────
         if game.match_state == 'full_time':
             self._draw_overlay(s, (0,0,0,200))
             ft = self.f_xl.render("FULL TIME", True, (255,220,0))
@@ -140,7 +130,6 @@ class HUD:
                 f"BARCELONA  {game.score[0]}  —  {game.score[1]}  REAL MADRID",
                 True, (255,255,255))
             s.blit(sc3, (SCR_W//2 - sc3.get_width()//2, SCR_H//2 - 10))
-            # Result line
             if game.score[0] > game.score[1]:
                 result = "BARCELONA WIN!";  rc = BAR_BLUE
             elif game.score[1] > game.score[0]:
@@ -149,10 +138,49 @@ class HUD:
                 result = "IT'S A DRAW!";    rc = (255,220,0)
             rl = self.f_med.render(result, True, rc)
             s.blit(rl, (SCR_W//2 - rl.get_width()//2, SCR_H//2 + 50))
-            quit_lbl = self.f_hud.render("Press ESC to quit", True, (140,140,140))
+            quit_lbl = self.f_hud.render("Press R to restart or ESC to quit", True, (140,140,140))
             s.blit(quit_lbl, (SCR_W//2 - quit_lbl.get_width()//2, SCR_H//2 + 95))
 
-    # ── Helper ────────────────────────────────────────────────────
+        if game.match_state == 'paused':
+            self._draw_overlay(s, (0,0,0,160))
+            pt = self.f_xl.render("PAUSED", True, (255,255,255))
+            s.blit(pt, (SCR_W//2 - pt.get_width()//2, SCR_H//2 - 70))
+            hint = self.f_med.render("Press P to resume · R to restart · ESC to quit", True, (210,210,210))
+            s.blit(hint, (SCR_W//2 - hint.get_width()//2, SCR_H//2 + 10))
+
+    def _draw_stamina(self, game):
+        bw, bh = 180, 14
+        bx, by = SCR_W - bw - 18, 18
+        pygame.draw.rect(self.screen, (0,0,0), (bx-3, by-3, bw+6, bh+6), border_radius=5)
+        pygame.draw.rect(self.screen, (50,50,50), (bx-3, by-3, bw+6, bh+6), 1, border_radius=5)
+        fill = int(bw * game.sel.stamina)
+        col = (60, 210, 90) if game.sel.stamina > 0.55 else ((255, 190, 60) if game.sel.stamina > 0.25 else (230, 70, 70))
+        pygame.draw.rect(self.screen, col, (bx, by, fill, bh), border_radius=4)
+        label = self.f_hud.render(f"STAMINA #{game.sel.num}", True, (230,230,230))
+        self.screen.blit(label, (bx, by - 15))
+
+    def _draw_radar(self, game):
+        rw, rh = 190, 118
+        rx, ry = SCR_W - rw - 14, SCR_H - rh - 14
+        pygame.draw.rect(self.screen, (10,10,10), (rx, ry, rw, rh), border_radius=8)
+        pygame.draw.rect(self.screen, (70,70,70), (rx, ry, rw, rh), 1, border_radius=8)
+        inner = pygame.Rect(rx + 8, ry + 8, rw - 16, rh - 16)
+        pygame.draw.rect(self.screen, (26, 82, 36), inner, border_radius=5)
+        pygame.draw.rect(self.screen, (180,180,180), inner, 1, border_radius=5)
+        pygame.draw.line(self.screen, (180,180,180), (inner.centerx, inner.top), (inner.centerx, inner.bottom), 1)
+        pygame.draw.circle(self.screen, (180,180,180), inner.center, 13, 1)
+
+        def rp(wx, wy):
+            x = inner.left + int((wx / W_W) * inner.width)
+            y = inner.top + int((wy / W_H) * inner.height)
+            return x, y
+
+        for p in game.ta:
+            pygame.draw.circle(self.screen, BAR_BLUE, rp(p.wx, p.wy), 3 if not p.selected else 4)
+        for p in game.tb:
+            pygame.draw.circle(self.screen, (230,230,230), rp(p.wx, p.wy), 3)
+        pygame.draw.circle(self.screen, (255, 215, 0), rp(game.ball.wx, game.ball.wy), 3)
+
     def _draw_overlay(self, surf, col_alpha):
         overlay = pygame.Surface((SCR_W, SCR_H), pygame.SRCALPHA)
         overlay.fill(col_alpha)

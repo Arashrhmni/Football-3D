@@ -30,6 +30,7 @@ class Player:
         self.anim_t    = random.uniform(0, math.pi * 2)
         self.throw_anim = 0   # >0 while raising arms for throw-in
         self.hold_timer = 0   # CPU dribble hold counter
+        self.stamina = 1.0
 
     # ── Kit ──────────────────────────────────────────────────────
     def _kit(self):
