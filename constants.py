@@ -21,21 +21,14 @@ SCR_W, SCR_H = 1280, 800
 FPS = 60
 
 # ── Match timing ─────────────────────────────────────────────────
-# 3 real minutes per half → 6 real minutes total = 90 game-minutes
-REAL_SECS_PER_HALF    = 180                          # 3 min real time
-HALF_FRAMES           = REAL_SECS_PER_HALF * FPS     # frames per half
-MATCH_FRAMES          = HALF_FRAMES * 2              # total frames
+REAL_SECS_PER_HALF    = 180
+HALF_FRAMES           = REAL_SECS_PER_HALF * FPS
+MATCH_FRAMES          = HALF_FRAMES * 2
 
 # ── Isometric projection ─────────────────────────────────────────
-# Standard dimetric (cabinet) projection:
-#   screen_x = (world_x - world_y) * cos30 * scale  +  cx
-#   screen_y = (world_x + world_y) * sin30 * scale  -  wz * vz_scale  +  cy
-# Using the SAME cos30 scale for both x and y world axes guarantees
-# that equal-length edges in world space appear equal-length on screen
-# and that the pitch boundary forms a proper parallelogram (not a skewed shape).
 _SCALE  = 0.46
-_COS30  = math.cos(math.radians(30)) * _SCALE   # ≈ 0.3985
-_SIN30  = math.sin(math.radians(30)) * _SCALE   # ≈ 0.2300
+_COS30  = math.cos(math.radians(30)) * _SCALE
+_SIN30  = math.sin(math.radians(30)) * _SCALE
 ISO_CX  = SCR_W // 2
 ISO_CY  = 490
 ISO_VZ  = 1.10
@@ -79,106 +72,366 @@ DB_CORNER_B = 'corner_B'
 DB_KICK_A   = 'kickoff_A'
 DB_KICK_B   = 'kickoff_B'
 
-DB_LABELS = {
-    DB_THROW_A:  "THROW-IN → BARCELONA",
-    DB_THROW_B:  "THROW-IN → REAL MADRID",
-    DB_GK_A:     "GOAL KICK → BARCELONA",
-    DB_GK_B:     "GOAL KICK → REAL MADRID",
-    DB_CORNER_A: "CORNER → BARCELONA",
-    DB_CORNER_B: "CORNER → REAL MADRID",
-    DB_KICK_A:   "KICK OFF → BARCELONA",
-    DB_KICK_B:   "KICK OFF → REAL MADRID",
-}
+# DB_LABELS is now built dynamically in Game using team names.
+# Kept here as empty fallback so old imports don't break.
+DB_LABELS = {}
 
-# ── Kit colours ──────────────────────────────────────────────────
-BAR_BLUE   = (0,  82, 170)
-BAR_RED    = (165, 17,  17)
-BAR_SHORTS = (0,  82, 170)
-BAR_SOCKS  = (0,  82, 170)
-RMA_SHIRT  = (238,238,238)
-RMA_GOLD   = (198,162,  0)
-RMA_SHORTS = (215,215,215)
-RMA_SOCKS  = (215,215,215)
-GK_A       = (255,140,  0)
-GK_B       = ( 40,160, 60)
-SKIN_A     = (222,182,142)
-HAIR_A     = ( 38, 28, 18)
-SKIN_B     = (212,176,136)
-HAIR_B     = ( 58, 44, 20)
+# ── Shared skin/hair tones ───────────────────────────────────────
+SKIN_LIGHT  = (222, 182, 142)
+HAIR_DARK   = ( 38,  28,  18)
+SKIN_MED    = (212, 176, 136)
+HAIR_MED    = ( 58,  44,  20)
+SKIN_OLIVE  = (198, 160, 110)
+HAIR_BLACK  = ( 20,  14,   8)
 
-# Bayern Munich
-BAY_RED    = (220,  16,  28)
-BAY_WHITE  = (255, 255, 255)
-BAY_SHORTS = (220,  16,  28)
-BAY_SOCKS  = (220,  16,  28)
-
-# Manchester City
-MCI_BLUE   = ( 97, 195, 238)
-MCI_WHITE  = (255, 255, 255)
-MCI_SHORTS = ( 97, 195, 238)
-MCI_SOCKS  = ( 97, 195, 238)
+# Legacy aliases (used by player.py gold_border branch)
+SKIN_A = SKIN_LIGHT
+HAIR_A = HAIR_DARK
+SKIN_B = SKIN_MED
+HAIR_B = HAIR_MED
+RMA_GOLD = (198, 162, 0)
+BAR_BLUE = (0, 82, 170)   # kept for hud import compat
 
 # ── Team registry ─────────────────────────────────────────────────
-# Each entry carries display info (for the menu) and kit colours (for player.py).
+# 'name'    → fictional/portfolio-safe display name
+# 'inspo'   → real-world inspiration (comment only, not displayed)
+# Kit flags → stripe / half_half / gold_border / hoops / sash
 TEAMS = {
-    'barcelona': {
-        'name':    'Barcelona',
-        'country': 'Spain',
-        'shirt1':  BAR_BLUE,
-        'shirt2':  BAR_RED,
-        'shorts':  BAR_SHORTS,
-        'socks':   BAR_SOCKS,
-        'gk':      GK_A,
-        'skin':    SKIN_A,
-        'hair':    HAIR_A,
-        'num_col': (255, 255, 255),
-        'hud_col': BAR_BLUE,
-        'stripe':  True,          # blaugrana vertical stripes
-        'stripe_cols': [BAR_BLUE, BAR_RED, BAR_BLUE],
-    },
-    'real_madrid': {
-        'name':    'Real Madrid',
-        'country': 'Spain',
-        'shirt1':  RMA_SHIRT,
-        'shirt2':  RMA_SHIRT,
-        'shorts':  RMA_SHORTS,
-        'socks':   RMA_SOCKS,
-        'gk':      GK_B,
-        'skin':    SKIN_B,
-        'hair':    HAIR_B,
-        'num_col': (30, 30, 30),
-        'hud_col': (215, 215, 215),
-        'stripe':  False,
-        'gold_border': True,      # white shirt with gold border
-    },
-    'bayern': {
-        'name':    'Bayern Munich',
-        'country': 'Germany',
-        'shirt1':  BAY_RED,
-        'shirt2':  BAY_RED,
-        'shorts':  BAY_SHORTS,
-        'socks':   BAY_SOCKS,
-        'gk':      (255, 210, 0),
-        'skin':    SKIN_A,
-        'hair':    HAIR_A,
-        'num_col': (255, 255, 255),
-        'hud_col': BAY_RED,
-        'stripe':  False,
-    },
-    'man_city': {
-        'name':    'Man City',
+
+    # ── Premier League ───────────────────────────────────────────
+    'sky_blues': {
+        'name':    'Sky Blues FC',          # inspo: Man City
         'country': 'England',
-        'shirt1':  MCI_BLUE,
-        'shirt2':  MCI_WHITE,
-        'shorts':  MCI_SHORTS,
-        'socks':   MCI_SOCKS,
-        'gk':      (255, 140, 0),
-        'skin':    SKIN_B,
-        'hair':    (20, 14, 8),
+        'shirt1':  ( 97, 195, 238),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 97, 195, 238),
+        'socks':   ( 97, 195, 238),
+        'gk':      (255, 140,   0),
+        'skin':    SKIN_MED,
+        'hair':    HAIR_BLACK,
         'num_col': (255, 255, 255),
-        'hud_col': MCI_BLUE,
-        'stripe':  False,
-        'half_half': True,        # left-right split shirt
+        'hud_col': ( 97, 195, 238),
+        'half_half': True,
+    },
+
+    # ── Bundesliga ───────────────────────────────────────────────
+    'fc_rot': {
+        'name':    'FC Rot München',        # inspo: Bayern Munich
+        'country': 'Germany',
+        'shirt1':  (220,  16,  28),
+        'shirt2':  (220,  16,  28),
+        'shorts':  (220,  16,  28),
+        'socks':   (220,  16,  28),
+        'gk':      (255, 210,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (220,  16,  28),
+    },
+
+    # ── La Liga ─── Spanish teams ────────────────────────────────
+    'fc_blaugrana': {
+        'name':    'FC Blaugrana',          # inspo: Barcelona
+        'country': 'Spain',
+        'shirt1':  (  0,  82, 170),
+        'shirt2':  (165,  17,  17),
+        'shorts':  (  0,  82, 170),
+        'socks':   (  0,  82, 170),
+        'gk':      (255, 140,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (  0,  82, 170),
+        'stripe':  True,
+        'stripe_cols': [(0, 82, 170), (165, 17, 17), (0, 82, 170)],
+    },
+
+    'los_blancos': {
+        'name':    'Los Blancos CF',        # inspo: Real Madrid
+        'country': 'Spain',
+        'shirt1':  (238, 238, 238),
+        'shirt2':  (238, 238, 238),
+        'shorts':  (215, 215, 215),
+        'socks':   (215, 215, 215),
+        'gk':      ( 40, 160,  60),
+        'skin':    SKIN_MED,
+        'hair':    HAIR_MED,
+        'num_col': ( 30,  30,  30),
+        'hud_col': (215, 215, 215),
+        'gold_border': True,
+    },
+
+    'yellow_submarine': {
+        'name':    'Yellow Submarine FC',   # inspo: Villarreal
+        'country': 'Spain',
+        'shirt1':  (255, 210,   0),
+        'shirt2':  (255, 210,   0),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (255, 210,   0),
+        'gk':      ( 80, 160, 255),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (220, 190,   0),
+    },
+
+    'colchoneros': {
+        'name':    'Club Colchoneros',      # inspo: Atlético Madrid
+        'country': 'Spain',
+        'shirt1':  (206,  32,  44),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (206,  32,  44),
+        'gk':      (  0, 180, 120),
+        'skin':    SKIN_MED,
+        'hair':    HAIR_MED,
+        'num_col': (255, 255, 255),
+        'hud_col': (206,  32,  44),
+        'stripe':  True,
+        'stripe_cols': [(206, 32, 44), (255, 255, 255), (206, 32, 44)],
+    },
+
+    'los_verdiblancos': {
+        'name':    'Los Verdiblancos',      # inspo: Real Betis
+        'country': 'Spain',
+        'shirt1':  ( 0, 130,  62),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   ( 0, 130,  62),
+        'gk':      (220, 180,   0),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': (  0, 130,  62),
+        'stripe':  True,
+        'stripe_cols': [(0, 130, 62), (255, 255, 255), (0, 130, 62)],
+    },
+
+    'los_celestes': {
+        'name':    'Los Celestes SC',       # inspo: Celta Vigo
+        'country': 'Spain',
+        'shirt1':  (135, 206, 235),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (135, 206, 235),
+        'socks':   (135, 206, 235),
+        'gk':      (255, 100,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (135, 206, 235),
+        'half_half': True,
+    },
+
+    'la_real': {
+        'name':    'La Real SC',            # inspo: Real Sociedad
+        'country': 'Spain',
+        'shirt1':  ( 20,  20,  20),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   ( 20,  20,  20),
+        'gk':      (  0, 160, 100),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': ( 80,  80,  80),
+        'stripe':  True,
+        'stripe_cols': [(20, 20, 20), (255, 255, 255), (20, 20, 20)],
+    },
+
+    'azulones': {
+        'name':    'FC Azulones',           # inspo: Getafe
+        'country': 'Spain',
+        'shirt1':  ( 20,  62, 134),
+        'shirt2':  ( 20,  62, 134),
+        'shorts':  ( 20,  62, 134),
+        'socks':   ( 20,  62, 134),
+        'gk':      (220,  80,   0),
+        'skin':    SKIN_MED,
+        'hair':    HAIR_MED,
+        'num_col': (255, 255, 255),
+        'hud_col': ( 20,  62, 134),
+    },
+
+    'los_rojillos': {
+        'name':    'Los Rojillos CF',       # inspo: Osasuna
+        'country': 'Spain',
+        'shirt1':  (180,  20,  30),
+        'shirt2':  (  0,   0,   0),
+        'shorts':  (  0,   0,   0),
+        'socks':   (180,  20,  30),
+        'gk':      (  0, 160, 220),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (180,  20,  30),
+        'stripe':  True,
+        'stripe_cols': [(180, 20, 30), (0, 0, 0), (180, 20, 30)],
+    },
+
+    'periquitos': {
+        'name':    'Periquitos FC',         # inspo: Espanyol
+        'country': 'Spain',
+        'shirt1':  ( 40,  80, 160),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (  0,   0,   0),
+        'socks':   ( 40,  80, 160),
+        'gk':      (  0, 180,  80),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': ( 40,  80, 160),
+        'stripe':  True,
+        'stripe_cols': [(40, 80, 160), (255, 255, 255), (40, 80, 160)],
+    },
+
+    'los_leones': {
+        'name':    'Los Leones AC',         # inspo: Athletic Club
+        'country': 'Spain',
+        'shirt1':  (210,  20,  30),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (  0,   0,   0),
+        'socks':   (  0,   0,   0),
+        'gk':      (200, 200,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (210,  20,  30),
+        'stripe':  True,
+        'stripe_cols': [(210, 20, 30), (255, 255, 255), (210, 20, 30)],
+    },
+
+    'montilivi': {
+        'name':    'FC Montilivi',          # inspo: Girona
+        'country': 'Spain',
+        'shirt1':  (190,   0,  30),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (255, 255, 255),
+        'socks':   (190,   0,  30),
+        'gk':      ( 80, 200, 120),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (190,   0,  30),
+        'half_half': True,
+    },
+
+    'franjirrojos': {
+        'name':    'Franjirrojos FC',       # inspo: Rayo Vallecano
+        'country': 'Spain',
+        'shirt1':  (255, 255, 255),
+        'shirt2':  (200,  20,  30),
+        'shorts':  (255, 255, 255),
+        'socks':   (255, 255, 255),
+        'gk':      (220, 180,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (200,  20,  30),
+        'sash':    True,   # diagonal red sash on white
+    },
+
+    'los_ches': {
+        'name':    'Los Ches CF',           # inspo: Valencia
+        'country': 'Spain',
+        'shirt1':  (255, 255, 255),
+        'shirt2':  (  0,   0,   0),
+        'shorts':  (  0,   0,   0),
+        'socks':   (  0,   0,   0),
+        'gk':      (220, 120,   0),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (200, 200, 200),
+    },
+
+    'babazorros': {
+        'name':    'FC Babazorros',         # inspo: Alavés
+        'country': 'Spain',
+        'shirt1':  (  0,  40, 130),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (255, 255, 255),
+        'socks':   (  0,  40, 130),
+        'gk':      (220,  50,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (  0,  40, 130),
+        'stripe':  True,
+        'stripe_cols': [(0, 40, 130), (255, 255, 255), (0, 40, 130)],
+    },
+
+    'vermells': {
+        'name':    'FC Vermells',           # inspo: Mallorca
+        'country': 'Spain',
+        'shirt1':  (210,  20,  40),
+        'shirt2':  (  0,   0,   0),
+        'shorts':  (  0,   0,   0),
+        'socks':   (  0,   0,   0),
+        'gk':      (  0, 180, 180),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': (210,  20,  40),
+    },
+
+    'nervionenses': {
+        'name':    'Club Nervionenses',     # inspo: Sevilla
+        'country': 'Spain',
+        'shirt1':  (255, 255, 255),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (255, 255, 255),
+        'socks':   (255, 255, 255),
+        'gk':      (200,  20,  30),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (210, 210, 210),
+        'gold_border': True,
+    },
+
+    'fc_ilicitano': {
+        'name':    'FC Ilicitano',          # inspo: Elche
+        'country': 'Spain',
+        'shirt1':  ( 20,  20,  20),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   ( 20,  20,  20),
+        'gk':      (  0, 160, 220),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': ( 80,  80,  80),
+        'half_half': True,
+    },
+
+    'granotes': {
+        'name':    'FC Granotes',           # inspo: Levante
+        'country': 'Spain',
+        'shirt1':  ( 40,  90, 180),
+        'shirt2':  (180,  20,  30),
+        'shorts':  ( 40,  90, 180),
+        'socks':   ( 40,  90, 180),
+        'gk':      (  0, 180,  90),
+        'skin':    SKIN_OLIVE,
+        'hair':    HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': ( 40,  90, 180),
+        'stripe':  True,
+        'stripe_cols': [(40, 90, 180), (180, 20, 30), (40, 90, 180)],
+    },
+
+    'carbayones': {
+        'name':    'FC Carbayones',         # inspo: Real Oviedo
+        'country': 'Spain',
+        'shirt1':  ( 20,  90, 180),
+        'shirt2':  ( 20,  90, 180),
+        'shorts':  (  0,   0,   0),
+        'socks':   ( 20,  90, 180),
+        'gk':      (220, 180,   0),
+        'skin':    SKIN_LIGHT,
+        'hair':    HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': ( 20,  90, 180),
     },
 }
 
