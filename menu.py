@@ -92,12 +92,15 @@ def _draw_flag(surf, rect, country):
 
 
 def draw_kit_preview(surf, cx, cy, kit):
-    """Mini shirt/shorts/socks preview centred at (cx, cy)."""
+    """Mini shirt/shorts/socks preview centred at (cx, cy).
+    Total height: ~42px  (body 28px + shorts 10px + socks 7px + gaps)
+    """
     shirt1 = kit['shirt1']
     shirt2 = kit.get('shirt2', shirt1)
     shorts = kit['shorts']
     sock   = kit['socks']
-    body   = pygame.Rect(cx-22, cy-20, 44, 40)
+    # Smaller body: 34 wide × 28 tall
+    body   = pygame.Rect(cx-17, cy-14, 34, 28)
 
     if kit.get('stripe'):
         cols = kit.get('stripe_cols', [shirt1, shirt2, shirt1])
@@ -106,26 +109,26 @@ def draw_kit_preview(surf, cx, cy, kit):
             clip  = pygame.Rect(body.x + si*sw, body.y, sw, body.h)
             inter = body.clip(clip)
             if inter.w > 0:
-                pygame.draw.rect(surf, sc, inter, border_radius=4)
+                pygame.draw.rect(surf, sc, inter, border_radius=3)
     elif kit.get('half_half'):
-        pygame.draw.rect(surf, shirt1, pygame.Rect(body.x, body.y, body.w//2, body.h), border_radius=4)
-        pygame.draw.rect(surf, shirt2, pygame.Rect(body.x+body.w//2, body.y, body.w//2, body.h), border_radius=4)
+        pygame.draw.rect(surf, shirt1, pygame.Rect(body.x, body.y, body.w//2, body.h), border_radius=3)
+        pygame.draw.rect(surf, shirt2, pygame.Rect(body.x+body.w//2, body.y, body.w//2, body.h), border_radius=3)
     elif kit.get('sash'):
-        pygame.draw.rect(surf, shirt1, body, border_radius=4)
+        pygame.draw.rect(surf, shirt1, body, border_radius=3)
         pts = [(body.x+body.w//3, body.y), (body.x+body.w, body.y), (body.x+body.w, body.y+body.h//3)]
         pygame.draw.polygon(surf, shirt2, pts)
     else:
-        pygame.draw.rect(surf, shirt1, body, border_radius=4)
+        pygame.draw.rect(surf, shirt1, body, border_radius=3)
 
-    pygame.draw.rect(surf, (0,0,0), body, 1, border_radius=4)
-    # Sleeves
-    pygame.draw.rect(surf, shirt1, (cx-32, cy-12, 11, 18), border_radius=3)
-    pygame.draw.rect(surf, shirt2, (cx+21, cy-12, 11, 18), border_radius=3)
+    pygame.draw.rect(surf, (0,0,0), body, 1, border_radius=3)
+    # Sleeves (small nubs either side)
+    pygame.draw.rect(surf, shirt1, (cx-26, cy-8,  9, 14), border_radius=2)
+    pygame.draw.rect(surf, shirt2, (cx+17, cy-8,  9, 14), border_radius=2)
     # Shorts
-    pygame.draw.rect(surf, shorts, (cx-16, cy+18, 32, 17), border_radius=3)
+    pygame.draw.rect(surf, shorts, (cx-13, cy+13, 26, 11), border_radius=3)
     # Socks
-    for so in (-8, 8):
-        pygame.draw.rect(surf, sock, (cx+so-4, cy+35, 8, 10), border_radius=2)
+    for so in (-6, 6):
+        pygame.draw.rect(surf, sock, (cx+so-3, cy+24,  6,  7), border_radius=2)
 
 
 # ── Generic button ───────────────────────────────────────────────
@@ -240,19 +243,23 @@ class TeamCard:
         pygame.draw.rect(surf, bg, self.rect, border_radius=12)
         pygame.draw.rect(surf, bc, self.rect, bw, border_radius=12)
 
-        draw_kit_preview(surf, self.rect.centerx, self.rect.y+48, kit)
+        # Kit preview: centred horizontally, sits in upper 60% of card
+        # cy = card top + 42  →  kit occupies roughly y+10 … y+66 (total ~56px)
+        draw_kit_preview(surf, self.rect.centerx, self.rect.y + 42, kit)
 
+        # Name: sits in lower portion with comfortable gap below the kit
         name = kit['name']
         ns   = self.fn.render(name, True, WHITE if (self.selected or self._hover) else GREY)
         if ns.get_width() > self.rect.w - 8:
             while ns.get_width() > self.rect.w - 8 and len(name) > 3:
                 name = name[:-1]
             ns = self.fn.render(name+'…', True, WHITE if (self.selected or self._hover) else GREY)
-        surf.blit(ns, ns.get_rect(centerx=self.rect.centerx, y=self.rect.y+85))
+        # Pin name to a fixed distance from the card bottom so it never overlaps the kit
+        surf.blit(ns, ns.get_rect(centerx=self.rect.centerx, y=self.rect.bottom - 22))
 
         if self.selected:
             chk = self.fs.render('✓ PICKED', True, GOLD)
-            surf.blit(chk, chk.get_rect(centerx=self.rect.centerx, y=self.rect.y+6))
+            surf.blit(chk, chk.get_rect(centerx=self.rect.centerx, y=self.rect.y + 4))
 
     def clicked(self, mx, my):
         return self.rect.collidepoint(mx, my)
