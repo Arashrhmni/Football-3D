@@ -71,6 +71,118 @@ def _draw_pitch_lines(surf):
     surf.blit(tmp, (0, 0))
 
 
+def _draw_stadium_bg(surf, t):
+    """Rich stadium-night background with grass, spotlights, stars."""
+    # Deep navy-to-black gradient sky
+    for y in range(SCR_H):
+        frac = y / SCR_H
+        r = int(4  + (10 - 4)  * frac)
+        g = int(8  + (20 - 8)  * frac)
+        b = int(20 + (40 - 20) * frac)
+        pygame.draw.line(surf, (r, g, b), (0, y), (SCR_W, y))
+
+    # Subtle star field
+    rng = __import__('random').Random(42)
+    for _ in range(120):
+        sx = rng.randint(0, SCR_W)
+        sy = rng.randint(0, int(SCR_H * 0.55))
+        bright = int(80 + 60 * math.sin(t * 0.8 + sx * 0.05))
+        r2 = rng.randint(1, 2)
+        star_surf = pygame.Surface((r2*2+2, r2*2+2), pygame.SRCALPHA)
+        pygame.draw.circle(star_surf, (bright, bright, bright+40, bright), (r2+1, r2+1), r2)
+        surf.blit(star_surf, (sx - r2, sy - r2))
+
+    # Two sweeping spotlights from top corners
+    for i, (ox, oy, phase) in enumerate([(160, -40, 0.0), (SCR_W-160, -40, math.pi)]):
+        ang  = math.radians(70) + math.sin(t * 0.4 + phase) * math.radians(18)
+        lx   = ox + math.cos(ang) * 900
+        ly   = oy + math.sin(ang) * 900
+        spot = pygame.Surface((SCR_W, SCR_H), pygame.SRCALPHA)
+        # Draw a cone of semi-transparent triangles
+        for w, alpha in [(120, 8), (70, 12), (30, 18)]:
+            perp_x = -math.sin(ang) * w
+            perp_y  =  math.cos(ang) * w
+            pts = [(ox, oy),
+                   (int(lx + perp_x), int(ly + perp_y)),
+                   (int(lx - perp_x), int(ly - perp_y))]
+            pygame.draw.polygon(spot, (255, 255, 200, alpha), pts)
+        surf.blit(spot, (0, 0))
+
+    # Grass strip at the bottom
+    grass_y = int(SCR_H * 0.78)
+    for y in range(grass_y, SCR_H):
+        frac = (y - grass_y) / (SCR_H - grass_y)
+        g_col = (int(10 + 22*frac), int(55 + 45*frac), int(14 + 18*frac))
+        pygame.draw.line(surf, g_col, (0, y), (SCR_W, y))
+
+    # Grass stripe pattern
+    stripe_w = 80
+    tmp = pygame.Surface((SCR_W, SCR_H - grass_y), pygame.SRCALPHA)
+    for sx in range(0, SCR_W, stripe_w * 2):
+        pygame.draw.rect(tmp, (255, 255, 255, 8), (sx, 0, stripe_w, SCR_H - grass_y))
+    surf.blit(tmp, (0, grass_y))
+
+    # Pitch line on grass edge
+    pygame.draw.line(surf, (255, 255, 255, 60) if False else (200, 220, 200),
+                     (0, grass_y), (SCR_W, grass_y), 2)
+
+    # Centre circle hint on grass
+    cc_surf = pygame.Surface((300, 160), pygame.SRCALPHA)
+    pygame.draw.ellipse(cc_surf, (255, 255, 255, 18),
+                        (0, 0, 300, 160), 2)
+    surf.blit(cc_surf, (SCR_W//2 - 150, grass_y + 10))
+
+
+def _draw_football_icon(surf, cx, cy, size, t):
+    """Animated football (soccer ball) SVG-style drawn with pygame."""
+    r = size
+    # Shadow
+    shd = pygame.Surface((r*4, r*2), pygame.SRCALPHA)
+    pygame.draw.ellipse(shd, (0, 0, 0, 60), shd.get_rect())
+    surf.blit(shd, (cx - r*2, cy + r - 4))
+
+    # Ball body with subtle gradient simulation (layered circles)
+    for dr, dc in [(r, (255,255,255)), (r-2, (240,242,245)), (r-6, (228,230,235))]:
+        pygame.draw.circle(surf, dc, (cx, cy), dr)
+
+    # Slight sheen highlight
+    hl_surf = pygame.Surface((r*2, r*2), pygame.SRCALPHA)
+    pygame.draw.circle(hl_surf, (255, 255, 255, 70),
+                       (int(r*0.55), int(r*0.38)), int(r*0.32))
+    surf.blit(hl_surf, (cx - r, cy - r))
+
+    # Pentagon patches — classic football pattern
+    patch_col  = (22, 22, 28)
+    patch_col2 = (38, 40, 50)
+    # Centre hexagon
+    _hex_patch(surf, cx, cy, int(r*0.30), patch_col)
+    # 5 surrounding pentagons
+    for i in range(5):
+        ang = math.radians(i * 72 - 90) + math.sin(t * 0.5) * 0.08
+        px  = cx + int(math.cos(ang) * r * 0.58)
+        py  = cy + int(math.sin(ang) * r * 0.58)
+        _hex_patch(surf, px, py, int(r*0.22), patch_col2)
+
+    # Outline
+    pygame.draw.circle(surf, (80, 80, 90), (cx, cy), r, 2)
+
+    # Subtle pulsing ring
+    ring_a = int(30 + 20 * math.sin(t * 1.8))
+    ring_r = pygame.Surface((r*4, r*4), pygame.SRCALPHA)
+    rr = r + 8 + int(4 * math.sin(t * 1.8))
+    pygame.draw.circle(ring_r, (255, 215, 0, ring_a), (r*2, r*2), rr, 3)
+    surf.blit(ring_r, (cx - r*2, cy - r*2))
+
+
+def _hex_patch(surf, cx, cy, r, col):
+    """Draw a small hexagonal patch."""
+    pts = [(int(cx + r * math.cos(math.radians(60*i - 30))),
+            int(cy + r * math.sin(math.radians(60*i - 30))))
+           for i in range(6)]
+    pygame.draw.polygon(surf, col, pts)
+    pygame.draw.polygon(surf, tuple(max(0, c-20) for c in col), pts, 1)
+
+
 def _draw_flag(surf, rect, country):
     """Draw a mini flag inside rect."""
     info = COUNTRIES.get(country, {})
@@ -458,61 +570,201 @@ class MainMenu:
     def __init__(self, screen, clock):
         self.screen = screen
         self.clock  = clock
-        self.f_title = pygame.font.SysFont("Georgia", 64, bold=True)
-        self.f_sub   = pygame.font.SysFont("Georgia", 22, bold=True)
-        self.f_btn   = pygame.font.SysFont("Georgia", 26, bold=True)
-        self.f_tiny  = pygame.font.SysFont("Arial",   13)
 
-        bw, bh = 320, 58
-        bx     = SCR_W//2 - bw//2
-        self.buttons = [
-            Button("⚡  QUICK PLAY", (bx, 330, bw, bh), enabled=True,
-                   col_normal=(20,80,36), col_hover=(30,120,54),
-                   text_col=GOLD, border_col=(40,160,70), font=self.f_btn),
-            Button("🏆  LEAGUE MODE", (bx, 410, bw, bh), enabled=True,
-                   col_normal=(28,44,100), col_hover=(44,70,160),
-                   text_col=WHITE, border_col=(60,100,200), font=self.f_btn),
-            Button("⭐  CHAMPIONS LEAGUE  (COMING SOON)", (bx-40, 490, bw+80, bh),
-                   enabled=False, font=self.f_btn),
-            Button("✕  QUIT", (bx, 578, bw, bh), enabled=True,
-                   col_normal=(60,14,14), col_hover=(100,20,20),
-                   text_col=(240,100,100), font=self.f_btn),
+        # Fonts — bold display + refined body
+        self.f_title  = pygame.font.SysFont("Georgia",    72, bold=True)
+        self.f_sub    = pygame.font.SysFont("Georgia",    18, bold=False, italic=True)
+        self.f_btn    = pygame.font.SysFont("Georgia",    24, bold=True)
+        self.f_badge  = pygame.font.SysFont("Arial",      11, bold=True)
+        self.f_tiny   = pygame.font.SysFont("Arial",      12)
+
+        # Menu entries: (label, tag, icon_char, bg, bg_h, text_col, border_col, enabled, badge)
+        self._entries = [
+            ("QUICK PLAY",           'quick_play', '▶',
+             (12, 88, 40),  (20,130,58),  (255,220,60),  (50,180,80),   True,  ""),
+            ("LEAGUE MODE",          'league',     '🏆',
+             (16, 38,110),  (26, 62,170),  (200,220,255), (70,110,220),  True,  "NEW"),
+            ("CHAMPIONS LEAGUE",     None,         '⭐',
+             (18, 18, 40),  (18, 18, 40),  (60, 65, 85),  (36, 40, 62),  False, "SOON"),
+            ("QUIT",                 'quit',       '✕',
+             (70, 12, 12),  (110,20, 20),  (255,110,110), (160,30, 30),  True,  ""),
         ]
-        self._t = 0.0
 
+        # Pre-build button rects
+        BW, BH, GAP = 340, 60, 14
+        bx = SCR_W//2 - BW//2
+        base_y = 330
+        self._btn_rects = [pygame.Rect(bx, base_y + i*(BH+GAP), BW, BH)
+                           for i in range(len(self._entries))]
+
+        self._t      = 0.0
+        self._hover  = -1
+        self._click_flash = {}   # btn_idx → flash timer
+
+        # Floating particles
+        rng = __import__('random').Random(7)
+        self._particles = [
+            {'x': rng.uniform(0, SCR_W), 'y': rng.uniform(0, SCR_H*0.7),
+             'vx': rng.uniform(-0.2, 0.2), 'vy': rng.uniform(-0.4, -0.1),
+             'r': rng.uniform(1, 2.5), 'a': rng.uniform(0, math.pi*2)}
+            for _ in range(40)
+        ]
+
+    # ── inner helpers ─────────────────────────────────────────────
+    def _update_particles(self):
+        for p in self._particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            p['a'] += 0.02
+            if p['y'] < -10:
+                p['y'] = SCR_H * 0.75
+                p['x'] = __import__('random').uniform(0, SCR_W)
+
+    def _draw_particles(self, surf):
+        for p in self._particles:
+            alpha = int(40 + 30*math.sin(p['a']))
+            ps = pygame.Surface((8, 8), pygame.SRCALPHA)
+            pygame.draw.circle(ps, (255, 220, 80, alpha),
+                               (4, 4), int(p['r']))
+            surf.blit(ps, (int(p['x'])-4, int(p['y'])-4))
+
+    def _draw_title(self, surf):
+        # Multi-layer glowing title
+        cx = SCR_W // 2
+
+        # Outer glow blob
+        for radius, alpha in [(260, 18), (200, 28), (140, 40)]:
+            g = pygame.Surface((radius*2, radius), pygame.SRCALPHA)
+            pygame.draw.ellipse(g, (255, 190, 20, alpha), g.get_rect())
+            surf.blit(g, (cx - radius, 88))
+
+        # Title shadow layers
+        for dx, dy, col in [(4,4,(0,0,0)), (2,2,(40,20,0)), (0,0,GOLD)]:
+            t_surf = self.f_title.render("FOOTBALL 3D", True, col)
+            surf.blit(t_surf, t_surf.get_rect(centerx=cx+dx, y=100+dy))
+
+        # Subtitle with letter-spacing simulation
+        sub_text = "T H E   B E A U T I F U L   G A M E"
+        sub = self.f_sub.render(sub_text, True, (140, 168, 210))
+        surf.blit(sub, sub.get_rect(centerx=cx, y=188))
+
+        # Decorative line under subtitle
+        line_w = sub.get_width() + 60
+        lx = cx - line_w//2
+        for loff, lc, lh in [(0,(60,80,130),1), (4,(255,200,0),2), (8,(60,80,130),1)]:
+            pygame.draw.line(surf, lc, (lx, 214+loff), (lx+line_w, 214+loff), lh)
+
+    def _draw_button(self, surf, idx, rect):
+        label, tag, icon, bg, bg_h, tc, bc, enabled, badge = self._entries[idx]
+        is_hov = (self._hover == idx) and enabled
+        flash  = self._click_flash.get(idx, 0)
+
+        # Background
+        col = bg_h if is_hov else bg
+        if flash > 0:
+            blend = flash / 8.0
+            col   = tuple(int(col[i]*(1-blend) + 255*blend*0.3) for i in range(3))
+
+        # Rounded rect with glow
+        pygame.draw.rect(surf, col, rect, border_radius=14)
+
+        if is_hov:
+            # Glow border + outer glow
+            glow_s = pygame.Surface((rect.w+16, rect.h+16), pygame.SRCALPHA)
+            pulse  = int(30 + 20*math.sin(self._t * 2.5))
+            pygame.draw.rect(glow_s, (*bc, pulse),
+                             glow_s.get_rect(), border_radius=16)
+            surf.blit(glow_s, (rect.x-8, rect.y-8))
+            pygame.draw.rect(surf, bc, rect, 3, border_radius=14)
+
+            # Shimmer strip across button
+            shim = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+            sx   = int((self._t * 60) % (rect.w + 100)) - 50
+            for sw, sa in [(60, 12), (30, 20)]:
+                pygame.draw.rect(shim, (255,255,255,sa), (sx, 0, sw, rect.h))
+            surf.blit(shim, rect.topleft)
+        else:
+            border_col = bc if enabled else (34, 40, 60)
+            pygame.draw.rect(surf, border_col, rect, 2, border_radius=14)
+
+        # Icon circle on left
+        icon_cx = rect.x + 38
+        icon_cy = rect.centery
+        if enabled:
+            pygame.draw.circle(surf, tuple(min(255,c+30) for c in col),
+                               (icon_cx, icon_cy), 20)
+            pygame.draw.circle(surf, bc, (icon_cx, icon_cy), 20, 2)
+        icon_s = self.f_btn.render(icon, True, tc if enabled else (50,55,70))
+        surf.blit(icon_s, icon_s.get_rect(center=(icon_cx, icon_cy)))
+
+        # Label
+        lbl = self.f_btn.render(label, True, tc if enabled else (50,55,70))
+        surf.blit(lbl, lbl.get_rect(x=rect.x+70, centery=rect.centery))
+
+        # Badge pill (NEW / SOON)
+        if badge:
+            badge_col = (255,60,60) if badge == "SOON" else (255,180,0)
+            bw2 = self.f_badge.render(badge, True, (0,0,0)).get_width() + 12
+            bx2 = rect.right - bw2 - 10
+            by2 = rect.y + 8
+            pygame.draw.rect(surf, badge_col, (bx2, by2, bw2, 18), border_radius=9)
+            bs  = self.f_badge.render(badge, True, (10,10,10))
+            surf.blit(bs, bs.get_rect(centerx=bx2+bw2//2, centery=by2+9))
+
+    # ── run / draw ────────────────────────────────────────────────
     def run(self):
         while True:
             self.clock.tick(FPS)
             mx, my = pygame.mouse.get_pos()
-            self._t += 0.03
+            self._t    += 0.04
+            self._hover = -1
+            for i, rect in enumerate(self._btn_rects):
+                if rect.collidepoint(mx, my) and self._entries[i][7]:
+                    self._hover = i
+
+            # Decay flash timers
+            for k in list(self._click_flash):
+                self._click_flash[k] -= 1
+                if self._click_flash[k] <= 0:
+                    del self._click_flash[k]
+
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
                     pygame.quit(); sys.exit()
                 if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
                     pygame.quit(); sys.exit()
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                    if self.buttons[0].clicked(mx, my): return 'quick_play'
-                    if self.buttons[1].clicked(mx, my): return 'league'
-                    if self.buttons[3].clicked(mx, my): pygame.quit(); sys.exit()
-            for b in self.buttons: b.update(mx, my)
+                    for i, rect in enumerate(self._btn_rects):
+                        if rect.collidepoint(mx, my):
+                            tag = self._entries[i][1]
+                            if tag and self._entries[i][7]:
+                                self._click_flash[i] = 8
+                                if tag == 'quit':
+                                    pygame.quit(); sys.exit()
+                                return tag
+
+            self._update_particles()
             self._draw()
             pygame.display.flip()
 
     def _draw(self):
-        _gradient_bg(self.screen)
-        _draw_pitch_lines(self.screen)
-        glow = pygame.Surface((600, 120), pygame.SRCALPHA)
-        pygame.draw.ellipse(glow, (255,200,0, int(40+20*math.sin(self._t))), glow.get_rect())
-        self.screen.blit(glow, (SCR_W//2-300, 130))
-        shadow = self.f_title.render("FOOTBALL 3D", True, (40,30,0))
-        title  = self.f_title.render("FOOTBALL 3D", True, GOLD)
-        self.screen.blit(shadow, shadow.get_rect(centerx=SCR_W//2+3, y=153))
-        self.screen.blit(title,  title.get_rect(centerx=SCR_W//2,    y=150))
-        sub = self.f_sub.render("THE BEAUTIFUL GAME", True, (120,150,200))
-        self.screen.blit(sub, sub.get_rect(centerx=SCR_W//2, y=226))
-        for b in self.buttons: b.draw(self.screen)
-        ver = self.f_tiny.render("v2.0  ·  22 clubs  ·  WASD / arrows in game", True, (55,65,90))
-        self.screen.blit(ver, ver.get_rect(centerx=SCR_W//2, y=SCR_H-28))
+        _draw_stadium_bg(self.screen, self._t)
+        self._draw_particles(self.screen)
+
+        # Football icon — sits top-centre above title
+        _draw_football_icon(self.screen, SCR_W//2, 62, 36, self._t)
+
+        self._draw_title(self.screen)
+
+        # Buttons
+        for i, rect in enumerate(self._btn_rects):
+            self._draw_button(self.screen, i, rect)
+
+        # Bottom credit strip
+        ver = self.f_tiny.render(
+            "v2.0  ·  58 clubs  ·  3 leagues  ·  WASD / arrows in game",
+            True, (45, 55, 80))
+        self.screen.blit(ver, ver.get_rect(centerx=SCR_W//2, y=SCR_H-22))
 
 
 # ── Team Selection ────────────────────────────────────────────────
