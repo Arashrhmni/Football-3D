@@ -8,7 +8,8 @@ from constants import (
 
 class HUD:
     def __init__(self, screen):
-        self.screen = screen
+        self.screen     = screen
+        self.league_mode = False
         self.f_hud  = pygame.font.SysFont("Arial",  13, bold=True)
         self.f_big  = pygame.font.SysFont("Georgia", 38, bold=True)
         self.f_med  = pygame.font.SysFont("Georgia", 24, bold=True)
@@ -145,7 +146,9 @@ class HUD:
             rl = self.f_med.render(result, True, rc)
             s.blit(rl, (SCR_W//2 - rl.get_width()//2, SCR_H//2 + 50))
             quit_lbl = self.f_hud.render(
-                "Press R to restart · ESC for main menu", True, (140,140,140))
+                "SPACE / ENTER to continue  ·  ESC to forfeit & skip" if self.league_mode
+                else "Press R to restart · ESC for main menu",
+                True, (140,140,140))
             s.blit(quit_lbl, (SCR_W//2 - quit_lbl.get_width()//2, SCR_H//2 + 95))
 
         if game.match_state == 'paused':

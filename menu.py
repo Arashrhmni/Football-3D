@@ -469,8 +469,9 @@ class MainMenu:
             Button("⚡  QUICK PLAY", (bx, 330, bw, bh), enabled=True,
                    col_normal=(20,80,36), col_hover=(30,120,54),
                    text_col=GOLD, border_col=(40,160,70), font=self.f_btn),
-            Button("🏆  LEAGUE  (COMING SOON)", (bx, 410, bw, bh),
-                   enabled=False, font=self.f_btn),
+            Button("🏆  LEAGUE MODE", (bx, 410, bw, bh), enabled=True,
+                   col_normal=(28,44,100), col_hover=(44,70,160),
+                   text_col=WHITE, border_col=(60,100,200), font=self.f_btn),
             Button("⭐  CHAMPIONS LEAGUE  (COMING SOON)", (bx-40, 490, bw+80, bh),
                    enabled=False, font=self.f_btn),
             Button("✕  QUIT", (bx, 578, bw, bh), enabled=True,
@@ -491,6 +492,7 @@ class MainMenu:
                     pygame.quit(); sys.exit()
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     if self.buttons[0].clicked(mx, my): return 'quick_play'
+                    if self.buttons[1].clicked(mx, my): return 'league'
                     if self.buttons[3].clicked(mx, my): pygame.quit(); sys.exit()
             for b in self.buttons: b.update(mx, my)
             self._draw()

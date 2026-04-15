@@ -764,16 +764,14 @@ class Game:
 
     # ── Main loop ─────────────────────────────────────────────────
     def run(self):
+        """Standard quick-play loop. Returns 'menu'."""
         while True:
             self.clock.tick(FPS)
-
             self._handle_events()
 
-            # ── Return to menu ────────────────────────────────────
             if self.match_state == 'quit_to_menu':
                 return 'menu'
 
-            # ── Full time: just show result screen, wait for input ──
             if self.match_state == 'full_time':
                 self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
                 self._draw_scene()
@@ -787,7 +785,6 @@ class Game:
                 pygame.display.flip()
                 continue
 
-            # ── Half-time pause ───────────────────────────────────
             if self.match_state == 'half_time':
                 self.half_time_timer -= 1
                 self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
@@ -798,11 +795,9 @@ class Game:
                     self._start_second_half()
                 continue
 
-            # ── Normal play ───────────────────────────────────────
             self._handle_input()
             self.match_time += 1
 
-            # Check for end of half
             if self.match_time >= HALF_FRAMES:
                 if self.half == 1:
                     self._start_half_time()
@@ -813,20 +808,113 @@ class Game:
 
             if self.kickoff_freeze > 0:
                 self.kickoff_freeze -= 1
-
             elif not self.dead:
                 self._update_gk_logic()
                 self._update_throw_in_pass()
-
                 if not self.throw_must_pass:
                     cpu_ai(self.tb, self.ta, self.ball)
                     cpu_attacking_shape(self.tb, self.ball)
                     team_a_support(self.ta, self.sel, self.ball)
-
                 self.ball.update()
                 self._check_goals()
                 self._check_out()
+                if not self.throw_must_pass and self.ball.owner is None and self.ball.wz < 11:
+                    all_p = self.ta + self.tb
+                    all_p.sort(key=lambda p: d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
+                    for p in all_p:
+                        if d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)) < CONTROL_R:
+                            self.ball.owner = p
+                            self.ball.last_toucher = p
+                            if p.team == 'B':
+                                for q in self.tb[1:]:
+                                    q.react = random.randint(7, 24)
+                            elif p is not self.sel:
+                                self._auto_switch(p)
+                            break
+            else:
+                self._update_dead()
 
+            self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
+            self._draw_scene()
+            self._hud.draw(self)
+            pygame.display.flip()
+
+    def run_league_match(self):
+        """
+        League variant: ESC skips to full-time (forfeits).
+        At full-time, pressing SPACE / ENTER / ESC returns (home_goals, away_goals).
+        Returns (score_a, score_b) — score_a is always team_a (home team).
+        """
+        self._hud.league_mode = True   # signals HUD to change hints
+        while True:
+            self.clock.tick(FPS)
+
+            for ev in pygame.event.get():
+                if ev.type == pygame.QUIT:
+                    pygame.quit(); sys.exit()
+                if ev.type == pygame.KEYDOWN:
+                    k = ev.key
+                    if k == pygame.K_ESCAPE:
+                        # forfeit / skip to result
+                        if self.match_state != 'full_time':
+                            self._start_full_time()
+                        else:
+                            return (self.score[0], self.score[1])
+                    if k in (pygame.K_RETURN, pygame.K_SPACE):
+                        if self.match_state == 'full_time':
+                            return (self.score[0], self.score[1])
+                    if k == pygame.K_p:
+                        if self.match_state in ('playing', 'paused'):
+                            self._toggle_pause()
+                    if k == pygame.K_F11:
+                        pygame.display.toggle_fullscreen()
+
+            if self.match_state == 'full_time':
+                self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
+                self._draw_scene()
+                self._hud.draw(self)
+                pygame.display.flip()
+                continue
+
+            if self.match_state == 'paused':
+                self._draw_scene()
+                self._hud.draw(self)
+                pygame.display.flip()
+                continue
+
+            if self.match_state == 'half_time':
+                self.half_time_timer -= 1
+                self.msgs = [[t,c,n-1] for t,c,n in self.msgs if n > 0]
+                self._draw_scene()
+                self._hud.draw(self)
+                pygame.display.flip()
+                if self.half_time_timer <= 0:
+                    self._start_second_half()
+                continue
+
+            self._handle_input()
+            self.match_time += 1
+
+            if self.match_time >= HALF_FRAMES:
+                if self.half == 1:
+                    self._start_half_time()
+                    continue
+                else:
+                    self._start_full_time()
+                    continue
+
+            if self.kickoff_freeze > 0:
+                self.kickoff_freeze -= 1
+            elif not self.dead:
+                self._update_gk_logic()
+                self._update_throw_in_pass()
+                if not self.throw_must_pass:
+                    cpu_ai(self.tb, self.ta, self.ball)
+                    cpu_attacking_shape(self.tb, self.ball)
+                    team_a_support(self.ta, self.sel, self.ball)
+                self.ball.update()
+                self._check_goals()
+                self._check_out()
                 if not self.throw_must_pass and self.ball.owner is None and self.ball.wz < 11:
                     all_p = self.ta + self.tb
                     all_p.sort(key=lambda p: d2((p.wx,p.wy),(self.ball.wx,self.ball.wy)))
