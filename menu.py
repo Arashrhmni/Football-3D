@@ -272,23 +272,24 @@ class TeamSelectScreen:
         self.f_btn    = pygame.font.SysFont("Georgia",22,bold=True)
         self.f_sum    = pygame.font.SysFont("Arial",  13,bold=True)
 
-        title_h=52; bot_h=62
-        ph = SCR_H-title_h-bot_h-self.PAD*2
+        self.title_zone_h = 98
+        self.bottom_zone_h = 86
+        ph = SCR_H - self.title_zone_h - self.bottom_zone_h - self.PAD * 2
         pw = (SCR_W-self.PAD*2-self.GAP)//2
 
-        self.panel_a = SidePanel((self.PAD, title_h+self.PAD, pw, ph),
+        self.panel_a = SidePanel((self.PAD, self.title_zone_h, pw, ph),
             "YOUR TEAM",(90,210,110),
             self.f_panel,self.f_country,self.f_card,self.f_small)
-        self.panel_b = SidePanel((self.PAD+pw+self.GAP,title_h+self.PAD,pw,ph),
+        self.panel_b = SidePanel((self.PAD+pw+self.GAP,self.title_zone_h,pw,ph),
             "CPU OPPONENT",(210,100,90),
             self.f_panel,self.f_country,self.f_card,self.f_small)
 
-        bh=48
+        bh=54
         self.btn_play = FancyBtn("▶  KICK OFF!",
-            (SCR_W//2-130,SCR_H-bh-8,260,bh),self.f_btn,
+            (SCR_W//2-150,SCR_H-bh-8,300,bh),self.f_btn,
             bg=(16,76,34),bg_h=(26,116,50),tc=GOLD,bc=(40,155,65),bc_h=(80,220,100),enabled=False)
         self.btn_back = FancyBtn("← BACK",
-            (self.PAD,SCR_H-bh-8,120,bh),self.f_btn,
+            (self.PAD,SCR_H-bh-8,130,bh),self.f_btn,
             bg=(24,24,50),bg_h=(40,40,88),tc=WHITE)
         self._t=0.0
         self._parts=make_particles(30,SCR_W,SCR_H)
@@ -341,13 +342,17 @@ class TeamSelectScreen:
         vs=pygame.font.SysFont("Georgia",18,bold=True).render("VS",True,GOLD)
         self.screen.blit(vs,vs.get_rect(centerx=cx,centery=SCR_H//2))
 
+        # Bottom action shelf
+        shelf_y = SCR_H - self.bottom_zone_h + 6
+        glass_panel(self.screen,(16,shelf_y,SCR_W-32,self.bottom_zone_h-14),tint=(6,12,34),alpha=208,border=(38,54,100),radius=18)
+
         # Summary bar
         ka=self.panel_a.selected_team; kb=self.panel_b.selected_team
-        a_n=TEAMS[ka]['name'] if ka else '—  pick country then club'
-        b_n=TEAMS[kb]['name'] if kb else '—  pick country then club'
-        glass_panel(self.screen,(SCR_W//2-300,SCR_H-62,600,28),tint=(8,14,40),alpha=200)
-        sum_s=self.f_sum.render(f"You: {a_n}    vs    CPU: {b_n}",True,(155,170,200))
-        self.screen.blit(sum_s,sum_s.get_rect(centerx=SCR_W//2,centery=SCR_H-48))
+        a_n=TEAMS[ka]['name'] if ka else 'pick country then club'
+        b_n=TEAMS[kb]['name'] if kb else 'pick country then club'
+        glass_panel(self.screen,(SCR_W//2-340,shelf_y+4,680,30),tint=(8,14,40),alpha=220,border=(34,48,88),radius=12)
+        sum_s=self.f_sum.render(f"You: {a_n}    vs    CPU: {b_n}",True,(170,184,214))
+        self.screen.blit(sum_s,sum_s.get_rect(centerx=SCR_W//2,centery=shelf_y+19))
 
         self.btn_play.draw(self.screen)
         self.btn_back.draw(self.screen)

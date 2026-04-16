@@ -126,16 +126,18 @@ class LeagueSetupScreen:
             self._tabs.append(CountryTab(country,(tx,115,tab_w,tab_h),self.f_ctry))
             tx+=tab_w+tab_gap
 
-        self.GRID_X=55; self.GRID_Y=210
-        self.GRID_W=SCR_W-110; self.GRID_H=SCR_H-290
+        self.top_zone_h = 232
+        self.bottom_zone_h = 86
+        self.GRID_X=55; self.GRID_Y=self.top_zone_h
+        self.GRID_W=SCR_W-110; self.GRID_H=SCR_H-self.top_zone_h-self.bottom_zone_h
 
-        bh=50
+        bh=54
         self.btn_start=FancyBtn("▶  START SEASON",
-            (SCR_W//2-140,SCR_H-bh-10,280,bh),self.f_btn,
+            (SCR_W//2-155,SCR_H-bh-10,310,bh),self.f_btn,
             bg=(16,76,34),bg_h=(26,116,50),tc=GOLD,bc=(40,155,65),bc_h=(80,220,100),
             enabled=False)
         self.btn_back=FancyBtn("← BACK",
-            (18,SCR_H-bh-10,120,bh),self.f_btn,
+            (18,SCR_H-bh-10,130,bh),self.f_btn,
             bg=(24,24,50),bg_h=(40,40,88),tc=WHITE)
         self._t=0.0
         self._parts=make_particles(35,SCR_W,SCR_H)
@@ -214,7 +216,7 @@ class LeagueSetupScreen:
         draw_football(self.screen,SCR_W//2,38,26,self._t)
         draw_page_title(self.screen,"LEAGUE MODE",
             pygame.font.SysFont("Georgia",38,bold=True),
-            SCR_W//2,48,GOLD,
+            SCR_W//2,28,GOLD,
             sub="Choose a league, then pick your club",
             sub_font=pygame.font.SysFont("Georgia",14,italic=True))
 
@@ -225,11 +227,12 @@ class LeagueSetupScreen:
         if self.sel_country:
             accent=LEAGUE_ACCENT.get(self.sel_country,GOLD)
             lname=LEAGUE_NAMES.get(self.sel_country,'')
-            banner=pygame.Surface((SCR_W-80,32),pygame.SRCALPHA)
-            pygame.draw.rect(banner,(*accent,22),banner.get_rect(),border_radius=8)
-            self.screen.blit(banner,(40,193))
+            banner_y = 184
+            banner=pygame.Surface((SCR_W-80,34),pygame.SRCALPHA)
+            pygame.draw.rect(banner,(*accent,28),banner.get_rect(),border_radius=10)
+            self.screen.blit(banner,(40,banner_y))
             ln=self.f_lname.render(lname,True,accent)
-            self.screen.blit(ln,ln.get_rect(centerx=SCR_W//2,centery=209))
+            self.screen.blit(ln,ln.get_rect(centerx=SCR_W//2,centery=banner_y+17))
 
         # Team card grid
         gr=self._grid_rect()
@@ -254,6 +257,15 @@ class LeagueSetupScreen:
                 by2=gr.y+int(self._scroll/total*gr.h)
                 pygame.draw.rect(self.screen,(22,36,72),(sbx,gr.y,4,gr.h),border_radius=2)
                 pygame.draw.rect(self.screen,GOLD,(sbx,by2,4,bh2),border_radius=2)
+
+        shelf_y = SCR_H - self.bottom_zone_h + 6
+        glass_panel(self.screen,(16,shelf_y,SCR_W-32,self.bottom_zone_h-14),tint=(6,12,34),alpha=208,border=(38,54,100),radius=18)
+        if self.sel_team:
+            tname = TEAMS[self.sel_team]['name']
+            msg = self.f_small.render(f"Selected club: {tname}", True, (170,184,214))
+        else:
+            msg = self.f_small.render("Select a league and then choose your club to start the season", True, (120,136,170))
+        self.screen.blit(msg, msg.get_rect(centerx=SCR_W//2, centery=shelf_y+19))
 
         self.btn_start.draw(self.screen); self.btn_back.draw(self.screen)
 
