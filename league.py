@@ -13,14 +13,18 @@ for _k,_d in TEAMS.items():
     COUNTRY_TEAMS.setdefault(_d['country'],[]).append(_k)
 
 LEAGUE_NAMES = {
-    'Spain':   'La Primera',
-    'England': 'The Premier League',
-    'Germany': 'Die Bundesliga',
+    'Spain':    'La Primera',
+    'England':  'The Premier League',
+    'Germany':  'Die Bundesliga',
+    'Italy':    'Serie A',
+    'Portugal': 'Primeira Liga',
 }
 LEAGUE_ACCENT = {
-    'Spain':   (230,  60,  40),
-    'England': ( 60, 120, 220),
-    'Germany': (220, 185,   0),
+    'Spain':    (230,  60,  40),
+    'England':  ( 60, 120, 220),
+    'Germany':  (220, 185,   0),
+    'Italy':    ( 0,  140,  69),
+    'Portugal': (220,  20,  60),
 }
 
 
@@ -102,7 +106,7 @@ class LeagueState:
 
 # ── LEAGUE SETUP SCREEN ───────────────────────────────────────────
 class LeagueSetupScreen:
-    COUNTRY_ORDER=['Spain','England','Germany']
+    COUNTRY_ORDER=['Spain','England','Germany','Italy','Portugal']
     CW,CH=140,108; CGAP=10
 
     def __init__(self,screen,clock):
@@ -118,8 +122,8 @@ class LeagueSetupScreen:
         self.sel_country=None; self.sel_team=None; self._scroll=0
         self._tabs=[]; self._cards=[]
 
-        # Country tabs — horizontal row near top
-        tab_w,tab_h,tab_gap=195,64,14
+        # Country tabs — 5 tabs, smaller width to fit screen
+        tab_w,tab_h,tab_gap=150,64,10
         total_w=len(self.COUNTRY_ORDER)*(tab_w+tab_gap)-tab_gap
         tx=SCR_W//2-total_w//2
         for country in self.COUNTRY_ORDER:
