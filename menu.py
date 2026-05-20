@@ -159,8 +159,8 @@ class MainMenu:
 
         self._entries = [
             ("QUICK PLAY",       'quick_play','▶',(12,88,40),(20,130,58),(255,220,60),(50,180,80),True,''),
-            ("LEAGUE MODE",      'league',    '🏆',(16,38,110),(26,62,170),(200,220,255),(70,110,220),True,'NEW'),
-            ("CHAMPIONS LEAGUE", None,        '⭐',(18,18,40),(18,18,40),(55,60,82),(34,38,60),False,'SOON'),
+            ("LEAGUE MODE",      'league',    '🏆',(16,38,110),(26,62,170),(200,220,255),(70,110,220),True,''),
+            ("CHAMPIONS LEAGUE", 'ucl',       '⭐',(18,28,88),(28,48,140),(255,220,60),(80,110,220),True,'NEW'),
             ("QUIT",             'quit',      '✕',(70,12,12),(110,20,20),(255,110,110),(160,30,30),True,''),
         ]
         self._rects = [pygame.Rect(bx, base_y+i*(BH+GAP), BW, BH)
@@ -200,7 +200,7 @@ class MainMenu:
         draw_football(self.screen, SCR_W//2, 62, 36, self._t)
         self._draw_title()
         for i,r in enumerate(self._rects): self._draw_btn(i,r)
-        ver=self.f_tiny.render("v2.0  ·  58 clubs  ·  3 leagues  ·  WASD/arrows in game",True,(42,52,78))
+        ver=self.f_tiny.render("v3.0  ·  76 clubs  ·  5 leagues  ·  Champions League  ·  WASD/arrows in game",True,(42,52,78))
         self.screen.blit(ver,ver.get_rect(centerx=SCR_W//2,y=SCR_H-20))
 
     def _draw_title(self):
