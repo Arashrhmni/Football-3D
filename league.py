@@ -1,6 +1,6 @@
 """league.py – League season system with beautiful screens."""
 import pygame, sys, math, random, itertools
-from constants import SCR_W, SCR_H, FPS, TEAMS
+from constants import SCR_W, SCR_H, FPS, TEAMS, get_stars
 from shared_ui import (
     GOLD, WHITE, GREY, PANEL_BG,
     draw_stadium_bg, make_particles, update_particles, draw_particles,
@@ -45,10 +45,21 @@ class Fixture:
     def __init__(self,home,away,md):
         self.home=home; self.away=away; self.matchday=md
         self.played=False; self.home_goals=self.away_goals=0
+
     def simulate(self):
-        h,a=random.randint(0,3),random.randint(0,3)
+        h_s = get_stars(self.home); a_s = get_stars(self.away)
+        # Poisson λ based on star difference + home advantage
+        h_lam = max(0.15, 0.55 + (h_s/5.0)*2.0 - (a_s/5.0)*0.75 + 0.12)
+        a_lam = max(0.15, 0.55 + (a_s/5.0)*2.0 - (h_s/5.0)*0.75)
+        def _poi(lam):
+            import math as _m
+            L=_m.exp(-lam); k=0; p=1.0
+            while p>L: p*=random.random(); k+=1
+            return max(0,k-1)
+        h=_poi(h_lam); a=_poi(a_lam)
         self.home_goals=h; self.away_goals=a; self.played=True
         return h,a
+
     def set_result(self,h,a):
         self.home_goals=h; self.away_goals=a; self.played=True
 
@@ -378,6 +389,12 @@ class LeagueHubScreen:
                     s=self.f_tbl_s.render(val,True,fc)
                 self.screen.blit(s,(cx2+cw//2-s.get_width()//2,ry+4))
                 cx2+=cw
+            # Tiny star dots after rank number
+            _sx = TBL_X+4+COL_W[0]+2; _sy = ry+ROW_H-6
+            _stars = get_stars(rec.key)
+            for _i in range(5):
+                _c = (255,210,0) if _i<_stars else (35,42,62)
+                pygame.draw.circle(self.screen, _c, (_sx+_i*7+3, _sy), 3)
 
         # ── RIGHT: Fixtures panel ────────────────────────────────
         FIX_X=TBL_X+TBL_W+18; FIX_W=SCR_W-FIX_X-14
@@ -619,5 +636,11 @@ class SeasonEndScreen:
                     fc=accent if i==len(vals)-1 else (WHITE if is_h else GREY)
                     s=self.f_tbl2.render(val,True,fc)
                 self.screen.blit(s,(cx2+cw//2-s.get_width()//2,ry+3)); cx2+=cw
+            # Tiny star dots
+            _sx2=TX+4+COL_W[0]+2; _sy2=ry+ROW_H-5
+            _stars2=get_stars(rec.key)
+            for _i in range(5):
+                _c2=(255,210,0) if _i<_stars2 else (35,42,62)
+                pygame.draw.circle(self.screen,_c2,(_sx2+_i*7+3,_sy2),3)
 
         self.btn.draw(self.screen)

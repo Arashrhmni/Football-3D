@@ -348,8 +348,9 @@ class TeamCard:
         self._t   = (self._t + 0.05) % (math.pi*2)
 
     def draw(self, surf):
-        from constants import TEAMS
+        from constants import TEAMS, get_stars
         kit = TEAMS[self.key]
+        stars = get_stars(self.key)
         if self.selected:
             bg=(32,55,110); bc=GOLD; bw=3
         elif self._hov:
@@ -371,7 +372,18 @@ class TeamCard:
             while ns.get_width() > self.rect.w-8 and len(name)>3:
                 name = name[:-1]
             ns = self.fn.render(name+'…', True, WHITE if (self.selected or self._hov) else GREY)
-        surf.blit(ns, ns.get_rect(centerx=self.rect.centerx, y=self.rect.bottom-20))
+        surf.blit(ns, ns.get_rect(centerx=self.rect.centerx, y=self.rect.bottom-30))
+
+        # Star rating
+        star_on  = (255, 210, 0)
+        star_off = (40, 45, 65)
+        sz = 8; gap = 2
+        total_w = 5*(sz+gap)-gap
+        sx = self.rect.centerx - total_w//2
+        sy = self.rect.bottom - 16
+        for i in range(5):
+            c = star_on if i < stars else star_off
+            pygame.draw.circle(surf, c, (sx + i*(sz+gap) + sz//2, sy + sz//2), sz//2)
 
         if self.selected:
             chk = self.fs.render('✓ SELECTED', True, GOLD)

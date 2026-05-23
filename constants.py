@@ -1503,3 +1503,64 @@ def clamp(v, lo, hi):
 
 def lerpc(a, b, t):
     return tuple(int(a[i]+(b[i]-a[i])*t) for i in range(3))
+
+
+# ── Team star ratings 1-5 ────────────────────────────────────────
+# 5=elite  4=top-six  3=mid-table  2=lower-table  1=relegation
+TEAM_STARS = {
+    # Spain
+    'fc_blaugrana':5,'los_blancos':5,'colchoneros':4,'nervionenses':4,
+    'la_real':4,'los_leones':3,'los_verdiblancos':3,'los_ches':3,
+    'azulones':3,'babazorros':3,'carbayones':2,'franjirrojos':2,
+    'granotes':2,'montilivi':2,'fc_rot':2,'fc_ilicitano':2,
+    'los_rojillos':2,'los_celestes':2,'periquitos':2,'sky_blues':4,
+    # England
+    'the_reds':5,'red_devils':4,'the_blues':4,'the_spurs':4,
+    'the_gunners':5,'the_villans':4,'the_magpies':4,'the_hammers':3,
+    'the_wolves':3,'the_cottagers':3,'the_bees':3,'the_seagulls':3,
+    'the_eagles':3,'the_whites':3,'the_toffees':2,'the_clarets':2,
+    'the_cherries':2,'the_tricky_trees':2,'the_black_cats':2,
+    # Germany
+    'die_nullfunfer':5,'die_werkself':5,'die_borussen':4,'die_bullen':4,
+    'die_adler':3,'die_wolfe':4,'die_fohlen':3,'die_breisgauer':3,
+    'die_eisernen':3,'die_kraichgauer':2,'die_schwaben':2,'die_storche':2,
+    'die_dinos':2,'die_fuggerstadter':2,'die_geissböcke':2,'die_kieze':2,
+    'die_werderaner':3,
+    # Italy
+    'inter':5,'napoli':5,'ac_milan':5,'juventus':5,'atalanta':4,
+    'as_roma':4,'lazio':4,'fiorentina':3,'bologna':3,'torino':3,
+    'udinese':2,'sassuolo':2,'parma':2,'genoa':2,'como':3,
+    'cagliari':2,'lecce':2,'cremonese':1,'hellas_verona':2,'pisa':1,
+    # Portugal
+    'porto':5,'sporting_cp':5,'benfica':5,'braga':4,'famalicao':3,
+    'vitoria_sc':3,'gil_vicente':2,'moreirense':2,'arouca':2,
+    'estoril':2,'rio_ave':2,'santa_clara':2,'nacional':2,'alverca':2,
+    'estrela_amadora':1,'casa_pia':1,'tondela':1,'avs':1,
+    # Spain (additional)
+    'yellow_submarine':3,'vermells':2,
+}
+
+def get_stars(key):
+    """Return star rating 1-5 (default 2)."""
+    return TEAM_STARS.get(key, 2)
+
+def ai_params(stars):
+    """
+    Return AI behaviour dict scaled by stars 1-5.
+    Higher stars = faster, smarter, more aggressive.
+    """
+    t = (max(1,min(5,stars)) - 1) / 4.0
+    return {
+        'walk':        1.40 + t*0.90,   # 1.40-2.30
+        'jog':         2.10 + t*1.10,   # 2.10-3.20
+        'run':         2.80 + t*1.20,   # 2.80-4.00
+        'sprint':      3.40 + t*1.00,   # 3.40-4.40
+        'react':       int(70-t*40),     # 70-30 frames
+        'press_r':     60   + t*100,     # 60-160
+        'shoot_r':     160  + t*180,     # 160-340
+        'pass_chance': 0.010+t*0.030,    # 0.010-0.040
+        'shoot_chance':0.012+t*0.025,    # 0.012-0.037
+        'tackle_prob': 0.006+t*0.016,    # 0.006-0.022
+        'inaccuracy':  0.30 -t*0.22,     # 0.30-0.08
+        'cross_chance':0.012+t*0.025,
+    }

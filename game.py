@@ -26,7 +26,7 @@ from constants import (
     DB_THROW_A, DB_THROW_B, DB_GK_A, DB_GK_B,
     DB_CORNER_A, DB_CORNER_B, DB_KICK_A, DB_KICK_B,
     BAR_BLUE, OUT_L, OUT_R, OUT_T, OUT_B,
-    TEAMS,
+    TEAMS, get_stars, ai_params,
     d2, n2, clamp, w2s
 )
 from ball   import Ball
@@ -51,6 +51,12 @@ class Game:
         self.team_b_name = self.kit_b['name'].upper()
         self.team_a_col  = self.kit_a['hud_col']
         self.team_b_col  = self.kit_b['hud_col']
+
+        # Star ratings drive AI quality for both teams
+        self.stars_a = get_stars(team_a_key)
+        self.stars_b = get_stars(team_b_key)
+        self._ai_p_a = ai_params(self.stars_a)   # used for team_a_support speeds
+        self._ai_p_b = ai_params(self.stars_b)   # used for cpu_ai (team B)
 
         # Register kits with player module
         set_kits(self.kit_a, self.kit_b)
@@ -812,9 +818,9 @@ class Game:
                 self._update_gk_logic()
                 self._update_throw_in_pass()
                 if not self.throw_must_pass:
-                    cpu_ai(self.tb, self.ta, self.ball)
-                    cpu_attacking_shape(self.tb, self.ball)
-                    team_a_support(self.ta, self.sel, self.ball)
+                    cpu_ai(self.tb, self.ta, self.ball, self._ai_p_b)
+                    cpu_attacking_shape(self.tb, self.ball, self._ai_p_b)
+                    team_a_support(self.ta, self.sel, self.ball, self._ai_p_a)
                 self.ball.update()
                 self._check_goals()
                 self._check_out()
@@ -909,9 +915,9 @@ class Game:
                 self._update_gk_logic()
                 self._update_throw_in_pass()
                 if not self.throw_must_pass:
-                    cpu_ai(self.tb, self.ta, self.ball)
-                    cpu_attacking_shape(self.tb, self.ball)
-                    team_a_support(self.ta, self.sel, self.ball)
+                    cpu_ai(self.tb, self.ta, self.ball, self._ai_p_b)
+                    cpu_attacking_shape(self.tb, self.ball, self._ai_p_b)
+                    team_a_support(self.ta, self.sel, self.ball, self._ai_p_a)
                 self.ball.update()
                 self._check_goals()
                 self._check_out()

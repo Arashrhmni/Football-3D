@@ -2,7 +2,7 @@
 import pygame
 from constants import (
     SCR_W, SCR_H, FPS,
-    HALF_FRAMES, W_W, W_H
+    HALF_FRAMES, W_W, W_H, get_stars
 )
 
 
@@ -37,8 +37,16 @@ class HUD:
 
         ta_l = self.f_hud.render(ta_name, True, ta_col)
         tb_l = self.f_hud.render(tb_name, True, tb_col)
-        s.blit(ta_l, (bx+10, 16))
-        s.blit(tb_l, (bx+bw-tb_l.get_width()-10, 16))
+        s.blit(ta_l, (bx+10, 12))
+        s.blit(tb_l, (bx+bw-tb_l.get_width()-10, 12))
+
+        # Star dots under each team name
+        def _draw_hud_stars(surf, sx, sy, n):
+            for i in range(5):
+                c = (255,210,0) if i < n else (40,45,65)
+                pygame.draw.circle(surf, c, (sx+i*9+4, sy), 3)
+        _draw_hud_stars(s, bx+10, 36, game.stars_a)
+        _draw_hud_stars(s, bx+bw-tb_l.get_width()-10, 36, game.stars_b)
 
         sc = self.f_big.render(f"{game.score[0]}  -  {game.score[1]}", True, (255,255,255))
         s.blit(sc, (SCR_W//2 - sc.get_width()//2, 4))

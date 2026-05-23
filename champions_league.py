@@ -20,7 +20,7 @@ import math
 import random
 import itertools
 
-from constants import SCR_W, SCR_H, FPS, TEAMS
+from constants import SCR_W, SCR_H, FPS, TEAMS, get_stars, ai_params
 from shared_ui import (
     GOLD, WHITE, GREY, PANEL_BG,
     draw_stadium_bg, make_particles, update_particles, draw_particles,
@@ -49,6 +49,15 @@ ROUND_NAMES = {
     'sf':      'Semi-finals',
     'final':   'Final',
 }
+
+
+def draw_stars(surf, x, y, stars, size=8, gap=2):
+    """Draw 1-5 gold/grey stars at (x,y)."""
+    col_on  = (255, 210, 0)
+    col_off = (50, 55, 75)
+    for i in range(5):
+        c = col_on if i < stars else col_off
+        pygame.draw.circle(surf, c, (x + i*(size+gap) + size//2, y + size//2), size//2)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -84,8 +93,29 @@ class UCLFixture:
         self.home_goals = self.away_goals = 0
 
     def simulate(self):
-        h = random.randint(0, 4)
-        a = random.randint(0, 3)
+        """
+        Score simulation weighted by star ratings.
+        A 5-star team vs a 1-star team will win much more often
+        and score more goals. Poisson-like sampling using star-adjusted λ.
+        """
+        h_stars = get_stars(self.home)
+        a_stars = get_stars(self.away)
+        # λ for Poisson-ish goal distribution
+        # Base λ ~1.3 goals per team; scale by relative star power
+        h_lam = 0.6 + (h_stars / 5.0) * 2.2 - (a_stars / 5.0) * 0.8
+        a_lam = 0.6 + (a_stars / 5.0) * 2.2 - (h_stars / 5.0) * 0.8
+        h_lam = max(0.15, h_lam)
+        a_lam = max(0.15, a_lam)
+        # Home advantage
+        h_lam *= 1.12
+        # Sample goals (Poisson approximation: sum of uniform draws)
+        def poisson_approx(lam):
+            L = math.exp(-lam); k = 0; p = 1.0
+            while p > L:
+                p *= random.random(); k += 1
+            return max(0, k - 1)
+        h = poisson_approx(h_lam)
+        a = poisson_approx(a_lam)
         self.home_goals = h; self.away_goals = a
         self.played = True
         return h, a
@@ -559,9 +589,10 @@ class UCLTeamPickerScreen:
             if filled:
                 name = TEAMS[key]['name']
                 ns = self.f_small.render(name, True, TEAMS[key]['hud_col'])
-                while ns.get_width() > self.SLOT_W-10 and len(name)>3:
+                while ns.get_width() > self.SLOT_W-44 and len(name)>3:
                     name = name[:-1]; ns = self.f_small.render(name+'…', True, TEAMS[key]['hud_col'])
-                self.screen.blit(ns, ns.get_rect(x=r.x+5, centery=r.centery))
+                self.screen.blit(ns, ns.get_rect(x=r.x+5, centery=r.centery-5))
+                draw_stars(self.screen, r.x+5, r.centery+4, get_stars(key), size=7, gap=1)
             else:
                 es = self.f_fsmall.render(f"Slot {i+1}", True, (30,44,70))
                 self.screen.blit(es, es.get_rect(x=r.x+5, centery=r.centery))
@@ -654,6 +685,9 @@ class UCLLeagueHubScreen:
                 fc = UCL_STAR if i==len(vals)-1 else (GOLD if is_h else (175,180,205))
                 s = self.f_tbl_s.render(val,True,fc)
                 self.screen.blit(s,(cx2+cw//2-s.get_width()//2,ry+2)); cx2+=cw
+            # Stars below team name (col index 1)
+            stars_x = TBL_X+4+COL_W[0]+2
+            draw_stars(self.screen, stars_x, ry+11, get_stars(rec.key), size=5, gap=1)
 
         ly=TBL_Y+24+min(36,len(table))*ROW_H+4
         for txt,col in [("Top 8 → R16",(80,140,220)),("9–24 → Play-offs",(80,190,100)),("25–36 → Out",(200,80,80))]:
