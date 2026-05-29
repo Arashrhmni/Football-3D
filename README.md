@@ -37,9 +37,3 @@ To align with professional open-source standards, this project utilizes **IP-Saf
 | **Pause / Menu** | `P` / `ESC` | Access match settings or quit to menu |
 | **Restart** | `R` | Quick-restart current match state |
 | **Fullscreen** | `F11` | Toggle display mode |
-
-## 🛠️ Installation & Run
-
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/YOUR_USERNAME/Football-3D.git](https://github.com/YOUR_USERNAME/Football-3D.git)
