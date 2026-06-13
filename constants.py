@@ -5,15 +5,16 @@ import math
 W_W, W_H   = 1260, 810
 W_MX, W_MY = W_W // 2, W_H // 2
 
-GOAL_W       = 145
+GOAL_W       = 88     # 7.32m  (real ratio of pitch width 68m)
 GOAL_TOP     = W_MY - GOAL_W // 2
 GOAL_BOT     = W_MY + GOAL_W // 2
-GOAL_DEPTH_W = 40
-GOAL_H_Z     = 78
+GOAL_DEPTH_W = 24     # ~2m goal depth
+GOAL_H_Z     = 0      # unused in top-down view (kept for compatibility)
 
-PA_W, PA_H = 190, 400
-SB_W, SB_H =  62, 180
-CTR_R       =  92
+PA_W, PA_H = 198, 480   # 16.5m x 40.32m penalty area
+SB_W, SB_H =  66, 218   # 5.5m  x 18.32m six-yard box
+CTR_R       = 110        # 9.15m centre-circle / penalty-arc radius
+PEN_SPOT_D  = 132        # 11m penalty spot distance from goal line
 OUT_L = OUT_R = OUT_T = OUT_B = 90
 
 # ── Screen ───────────────────────────────────────────────────────
@@ -25,17 +26,18 @@ REAL_SECS_PER_HALF = 180
 HALF_FRAMES        = REAL_SECS_PER_HALF * FPS
 MATCH_FRAMES       = HALF_FRAMES * 2
 
-# ── Isometric projection ─────────────────────────────────────────
-_SCALE = 0.46
-_COS30 = math.cos(math.radians(30)) * _SCALE
-_SIN30 = math.sin(math.radians(30)) * _SCALE
+# ── Top-down orthographic projection ──────────────────────────────
+# A clean bird's-eye view: world (x,y) maps directly to screen with a
+# single uniform scale. wz (height) only gives a small visual lift
+# for the ball and player animation "hop" — it does NOT skew the pitch.
+PITCH_SCALE = 0.70
 ISO_CX = SCR_W // 2
-ISO_CY = 490
-ISO_VZ = 1.10
+ISO_CY = SCR_H // 2 - 10
+Z_LIFT = 0.5   # pixels of vertical lift per world-unit of height
 
 def w2s(wx, wy, wz=0.0):
-    sx = (wx - W_MX) * _COS30 - (wy - W_MY) * _COS30 + ISO_CX
-    sy = (wx - W_MX) * _SIN30 + (wy - W_MY) * _SIN30 - wz * ISO_VZ + ISO_CY
+    sx = (wx - W_MX) * PITCH_SCALE + ISO_CX
+    sy = (wy - W_MY) * PITCH_SCALE + ISO_CY - wz * Z_LIFT
     return int(sx), int(sy)
 
 # ── Physics ──────────────────────────────────────────────────────
