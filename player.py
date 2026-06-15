@@ -1,4 +1,17 @@
-"""player.py – Player entity: drawing, movement, animation."""
+"""player.py – Player entity: top-down drawing, movement, animation.
+
+Top-down design philosophy
+───────────────────────────
+Viewed directly from above, a footballer mostly reads as:
+  - a coloured disc (shirt + shoulders)
+  - a jersey number on the chest
+  - two small "feet" dots that animate when running
+  - a tiny head/hair circle peeking out the top of the shirt
+  - a soft drop-shadow offset toward a fixed "sun" direction,
+    giving subtle depth without breaking the flat look
+
+Kits are still fully supported (solid, stripes, half-half, gold trim).
+"""
 import pygame
 import math
 import random
@@ -15,6 +28,13 @@ def set_kits(kit_a, kit_b):
     global _KIT_A, _KIT_B
     _KIT_A = kit_a
     _KIT_B = kit_b
+
+
+# ── Shared "sun" direction for all drop-shadows ────────────────────
+# Light comes from the upper-left, so shadows fall toward lower-right.
+SUN_DX, SUN_DY = 0.55, 0.75     # offset direction (screen-space)
+SHADOW_DIST    = 4               # px the shadow is offset from the body
+SHADOW_ALPHA   = 70
 
 
 class Player:
@@ -42,7 +62,6 @@ class Player:
     def _kit(self):
         cfg = _KIT_A if self.team == 'A' else _KIT_B
         if cfg is None:
-            # hard fallback (should never happen)
             return (0, 82, 170), (0, 82, 170), (0, 82, 170), (222, 182, 142), (38, 28, 18)
         if self.is_keeper:
             gk = cfg['gk']
@@ -68,6 +87,41 @@ class Player:
         self.wx = clamp(self.wx, -OUT_L, W_W + OUT_R)
         self.wy = clamp(self.wy, -OUT_T, W_H + OUT_B)
 
+    # ── Helpers for kit fills on a circular body ──────────────────
+    def _draw_striped_body(self, surf, cx, cy, r, cfg, shirt):
+        """Vertical stripes clipped to the body circle via alpha mask."""
+        cols = cfg.get('stripe_cols', [shirt, cfg.get('shirt2', shirt), shirt])
+        n = max(1, len(cols))
+        size = r * 2 + 2
+        stripe_w = max(2, size // n)
+        body = pygame.Surface((size, size), pygame.SRCALPHA)
+        body.fill((0, 0, 0, 0))
+        for i, col in enumerate(cols):
+            sx = i * stripe_w
+            w = stripe_w if i < n - 1 else size - sx
+            pygame.draw.rect(body, (col[0], col[1], col[2], 255), (sx, 0, w, size))
+        # Circular alpha mask
+        mask = pygame.Surface((size, size), pygame.SRCALPHA)
+        mask.fill((0, 0, 0, 0))
+        pygame.draw.circle(mask, (255, 255, 255, 255), (r + 1, r + 1), r)
+        body.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(body, (cx - r - 1, cy - r - 1))
+
+    def _draw_half_half_body(self, surf, cx, cy, r, cfg, shirt):
+        """Left/right two-tone split, clipped to the body circle."""
+        s1 = cfg['shirt1']
+        s2 = cfg.get('shirt2', shirt)
+        size = r * 2 + 2
+        body = pygame.Surface((size, size), pygame.SRCALPHA)
+        body.fill((0, 0, 0, 0))
+        pygame.draw.rect(body, (s1[0], s1[1], s1[2], 255), (0, 0, size // 2, size))
+        pygame.draw.rect(body, (s2[0], s2[1], s2[2], 255), (size // 2, 0, size - size // 2, size))
+        mask = pygame.Surface((size, size), pygame.SRCALPHA)
+        mask.fill((0, 0, 0, 0))
+        pygame.draw.circle(mask, (255, 255, 255, 255), (r + 1, r + 1), r)
+        body.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(body, (cx - r - 1, cy - r - 1))
+
     # ── Draw ─────────────────────────────────────────────────────
     def draw(self, surf, ball, fnt):
         shirt, shorts, socks, skin, hair = self._kit()
@@ -76,130 +130,94 @@ class Player:
         moving   = math.hypot(self.vx, self.vy) > 0.2
         if moving:
             self.anim_t += 0.28
-        bob = math.sin(self.anim_t) * 3.2 if moving else 0.0
 
         gx, gy = w2s(self.wx, self.wy, 0)
-        bx, by = w2s(self.wx, self.wy, max(0, bob + 4))
 
-        # Shadow
-        shw = pygame.Surface((PLAYER_R*4, PLAYER_R*2), pygame.SRCALPHA)
-        pygame.draw.ellipse(shw, (0, 0, 0, 58), shw.get_rect())
-        surf.blit(shw, (gx - PLAYER_R*2, gy - PLAYER_R))
+        R = int(PLAYER_R * 1.35)     # body radius (shirt/shoulders disc) — slightly larger for readability
+        FOOT_R = max(2, int(R * 0.20))
+        HEAD_R = max(3, int(R * 0.30))
 
-        # Legs
-        foot_r = max(3, int(PLAYER_R * 0.40))
-        l_fwd  = PLAYER_R - 2
-        l_off  = int(PLAYER_R * 0.38)
+        # ── Drop shadow (offset toward fixed "sun" direction) ──────
+        shadow_r = int(R * 1.05)
+        shw = pygame.Surface((shadow_r * 2 + 6, shadow_r * 2 + 6), pygame.SRCALPHA)
+        shw.fill((0, 0, 0, 0))
+        pygame.draw.ellipse(
+            shw, (0, 0, 0, SHADOW_ALPHA),
+            (3, 3, shadow_r * 2, int(shadow_r * 1.7))
+        )
+        surf.blit(
+            shw,
+            (gx - shadow_r - 3 + int(SUN_DX * SHADOW_DIST),
+             gy - shadow_r - 3 + int(SUN_DY * SHADOW_DIST) + int(R * 0.25))
+        )
+
+        # ── Feet (two small dots, animate fore/aft when moving) ────
+        foot_spread = R * 0.55
         for sign in (-1, 1):
             ph = self.anim_t + (0 if sign == -1 else math.pi)
-            lb = math.sin(ph) * 5 if moving else 0
-            lx = bx + int(self.fdx*l_fwd) + int(self.fdy*sign*l_off)
-            ly = by + int(self.fdy*l_fwd) - int(self.fdx*sign*l_off) + PLAYER_R + int(lb)
-            pygame.draw.line(surf, socks, (lx, by+PLAYER_R-3), (lx, ly-foot_r+1), 5)
-            bcol = tuple(max(0, c - 60) for c in (cfg.get('shorts', (0, 0, 0)) if not self.is_keeper else (30, 30, 30)))
-            pygame.draw.circle(surf, bcol, (lx, ly), foot_r)
-            pygame.draw.circle(surf, (0, 0, 0), (lx, ly), foot_r, 1)
+            stride = math.sin(ph) * (R * 0.35) if moving else 0.0
+            fx = gx + self.fdx * stride - self.fdy * sign * foot_spread
+            fy = gy + self.fdy * stride + self.fdx * sign * foot_spread
+            bcol = tuple(max(0, c - 60) for c in
+                          (shorts if not self.is_keeper else (30, 30, 30)))
+            pygame.draw.circle(surf, bcol, (int(fx), int(fy)), FOOT_R)
+            pygame.draw.circle(surf, (0, 0, 0), (int(fx), int(fy)), FOOT_R, 1)
 
-        # Shorts
-        sw = int(PLAYER_R*1.25); sh = int(PLAYER_R*0.9)
-        pygame.draw.ellipse(surf, shorts, (bx-sw, by+sh//4, sw*2, sh))
-
-        # Torso
-        tw = int(PLAYER_R*1.38); th = int(PLAYER_R*1.48)
-        t_y  = by - th + sh//4
-        torso = (bx-tw, t_y, tw*2, th)
-        pygame.draw.ellipse(surf, shirt, torso)
-
+        # ── Main body disc (shirt) ──────────────────────────────────
         if not self.is_keeper and cfg.get('stripe'):
-            sw2 = max(4, tw // 3)
-            cols = cfg.get('stripe_cols', [shirt, cfg.get('shirt2', shirt), shirt])
-            for si, sc in enumerate(cols):
-                rx   = bx - tw + si * sw2 * 2
-                clip = pygame.Rect(rx, t_y, sw2 * 2, th)
-                inter = pygame.Rect(*torso).clip(clip)
-                if inter.w > 0 and inter.h > 0:
-                    sub = pygame.Surface((inter.w, inter.h), pygame.SRCALPHA)
-                    sub.fill(sc)
-                    surf.blit(sub, (inter.x, inter.y))
-            pygame.draw.ellipse(surf, tuple(max(0, c - 28) for c in shirt), torso, 2)
+            self._draw_striped_body(surf, gx, gy, R, cfg, shirt)
+            pygame.draw.circle(surf, tuple(max(0, c - 35) for c in shirt), (gx, gy), R, 2)
         elif not self.is_keeper and cfg.get('half_half'):
-            # Left-right two-tone split (Man City)
-            s1 = cfg['shirt1']
-            s2 = cfg.get('shirt2', shirt)
-            left_r  = pygame.Rect(bx - tw, t_y, tw, th)
-            right_r = pygame.Rect(bx,      t_y, tw, th)
-            for half_r, col in ((left_r, s1), (right_r, s2)):
-                inter = pygame.Rect(*torso).clip(half_r)
-                if inter.w > 0 and inter.h > 0:
-                    sub = pygame.Surface((inter.w, inter.h), pygame.SRCALPHA)
-                    sub.fill(col)
-                    surf.blit(sub, (inter.x, inter.y))
-            pygame.draw.ellipse(surf, tuple(max(0, c - 20) for c in s1), torso, 2)
+            self._draw_half_half_body(surf, gx, gy, R, cfg, shirt)
+            pygame.draw.circle(surf, tuple(max(0, c - 30) for c in cfg['shirt1']), (gx, gy), R, 2)
         elif not self.is_keeper and cfg.get('gold_border'):
-            # Plain white with gold trim (Real Madrid)
-            pygame.draw.ellipse(surf, shirt, torso)
+            pygame.draw.circle(surf, shirt, (gx, gy), R)
             from constants import RMA_GOLD
-            pygame.draw.ellipse(surf, RMA_GOLD, torso, 2)
+            pygame.draw.circle(surf, RMA_GOLD, (gx, gy), R, 2)
         else:
-            pygame.draw.ellipse(surf, tuple(max(0, c - 20) for c in shirt), torso, 2)
+            pygame.draw.circle(surf, shirt, (gx, gy), R)
+            pygame.draw.circle(surf, tuple(max(0, c - 35) for c in shirt), (gx, gy), R, 2)
 
-        # Jersey number
+        # ── Shorts hem (thin arc at the bottom edge of the disc) ────
+        hem_rect = pygame.Rect(gx - R, gy - R, R * 2, R * 2)
+        pygame.draw.arc(surf, shorts, hem_rect, math.radians(200), math.radians(340), 4)
+
+        # ── Head (small circle at the edge, toward facing direction) ─
+        head_off = R * 0.78
+        hx_ = gx + self.fdx * head_off
+        hy_ = gy + self.fdy * head_off
+        pygame.draw.circle(surf, skin, (int(hx_), int(hy_)), HEAD_R)
+        pygame.draw.circle(surf, tuple(max(0, c - 18) for c in skin), (int(hx_), int(hy_)), HEAD_R, 1)
+        # Hair: small crescent on the back of the head (opposite facing dir)
+        hair_off = HEAD_R * 0.55
+        hxh = hx_ - self.fdx * hair_off
+        hyh = hy_ - self.fdy * hair_off
+        pygame.draw.circle(surf, hair, (int(hxh), int(hyh)), max(2, int(HEAD_R * 0.70)))
+
+        # ── Jersey number on the chest ──────────────────────────────
         num_col = cfg.get('num_col', (255, 255, 255)) if not self.is_keeper else (255, 255, 255)
         ns = fnt.render(str(self.num), True, num_col)
-        surf.blit(ns, (bx - ns.get_width()//2, t_y + th//2 - ns.get_height()//2))
+        surf.blit(ns, (gx - ns.get_width() // 2, gy - ns.get_height() // 2 + 2))
 
-        # Arms (attached, not floating)
-        arm_col = shirt
-        for sign in (-1, 1):
-            arm_swing = math.sin(self.anim_t + sign*math.pi*0.5)*5 if moving else 0
-            sx2 = bx + sign*(tw-2)
-            sy2 = t_y + th//4
-            ex2 = sx2 + sign*5
-            ey2 = sy2 + th//2 + int(arm_swing*0.6)
-            pygame.draw.line(surf, arm_col, (sx2, sy2), (ex2, ey2),
-                             max(4, int(PLAYER_R*0.32)))
-            pygame.draw.circle(surf, skin, (ex2, ey2+3),
-                               max(3, int(PLAYER_R*0.24)))
-
-        # Throw-in arms raised
+        # ── Throw-in: small raised-arm indicators ────────────────────
         if self.throw_anim > 0:
-            progress  = min(1.0, self.throw_anim / 20.0)
-            raise_y   = int(progress * 20)
+            progress = min(1.0, self.throw_anim / 20.0)
+            arm_len = int(R * (0.6 + 0.6 * progress))
             for sign in (-1, 1):
-                ax = bx + sign*(tw-2)
-                ay = t_y + th//4 - raise_y
-                pygame.draw.line(surf, arm_col,
-                                 (ax, t_y+th//4), (ax, ay),
-                                 max(4, int(PLAYER_R*0.32)))
-                pygame.draw.circle(surf, skin, (ax, ay),
-                                   max(3, int(PLAYER_R*0.24)))
+                ax = gx - self.fdy * sign * (R * 0.8)
+                ay = gy + self.fdx * sign * (R * 0.8)
+                ex = ax - self.fdx * arm_len * 0.3
+                ey = ay - self.fdy * arm_len * 0.3
+                pygame.draw.line(surf, shirt, (ax, ay), (ex, ey), 3)
+                pygame.draw.circle(surf, skin, (int(ex), int(ey)), max(2, int(R * 0.22)))
 
-        # Neck + head
-        neck_top = t_y - 1
-        pygame.draw.line(surf, skin, (bx, neck_top), (bx, neck_top-5), 4)
-        hr  = int(PLAYER_R*0.70)
-        hcy = neck_top - hr - 1
-        pygame.draw.circle(surf, skin, (bx, hcy), hr)
-        pygame.draw.circle(surf, tuple(max(0,c-18) for c in skin), (bx,hcy), hr, 1)
-        pygame.draw.arc(surf, hair,
-                        (bx-hr, hcy-hr, hr*2, hr*2),
-                        math.radians(20), math.radians(160), hr)
-        # Eyes
-        eo = max(2, hr//3)
-        for sg in (-1, 1):
-            ex3 = bx + int(self.fdx*eo*0.5) + sg*int(abs(self.fdy)*eo*0.5 + max(2, hr//4))
-            pygame.draw.circle(surf, (25,25,25), (ex3, hcy+2), 2)
-
-        # Selection ring
+        # ── Selection ring ───────────────────────────────────────────
         if self.selected:
             t_ms  = pygame.time.get_ticks()
-            pulse = int(3 + 2*math.sin(t_ms*0.007))
+            pulse = int(2 + 2 * math.sin(t_ms * 0.007))
             rc    = (0, 255, 100) if self.team == 'A' else (255, 200, 0)
-            pygame.draw.ellipse(surf, rc,
-                (gx-PLAYER_R-pulse, gy-(PLAYER_R+pulse)//2,
-                 (PLAYER_R+pulse)*2, PLAYER_R+pulse), 3)
+            pygame.draw.circle(surf, rc, (gx, gy), R + 4 + pulse, 2)
 
-        # Ball glow
+        # ── Ball possession glow ───────────────────────────────────
         if has_ball:
-            pygame.draw.ellipse(surf, (255, 225, 0),
-                (gx-PLAYER_R-6, gy-(PLAYER_R+6)//2, (PLAYER_R+6)*2, PLAYER_R+6), 2)
+            pygame.draw.circle(surf, (255, 225, 0), (gx, gy), R + 6, 2)

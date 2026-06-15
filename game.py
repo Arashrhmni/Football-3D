@@ -40,7 +40,7 @@ class Game:
     def __init__(self, screen, clock, team_a_key='barcelona', team_b_key='real_madrid'):
         self.screen = screen
         self.clock  = clock
-        self.f_num  = pygame.font.SysFont("Arial", 9, bold=True)
+        self.f_num  = pygame.font.SysFont("Arial", 11, bold=True)
 
         # Team identity
         self.team_a_key  = team_a_key
