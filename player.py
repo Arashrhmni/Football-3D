@@ -185,6 +185,106 @@ class Player:
         return sprite, final_size // 2, R
 
     # ── Main draw ─────────────────────────────────────────────────
+    def _pt(self, gx, gy, px, py, scale=1.0):
+        """Rotate a local top-down player point into screen coordinates."""
+        # Forward vector comes from current movement/facing direction.
+        fx, fy = self.fdx, self.fdy
+        ln = math.hypot(fx, fy)
+        if ln <= 0.001:
+            fx, fy = (1.0, 0.0) if self.team == 'A' else (-1.0, 0.0)
+        else:
+            fx, fy = fx / ln, fy / ln
+        # Perpendicular vector.
+        pxv, pyv = -fy, fx
+        return (int(gx + (pxv * px + fx * py) * scale), int(gy + (pyv * px + fy * py) * scale))
+
+    def _draw_direct_player(self, surf, gx, gy, shirt, shorts, socks, skin, hair, cfg, moving, fnt):
+        """Draw the footballer directly on the pitch.
+
+        Important: this does NOT use a temporary rectangular sprite surface.
+        That means there is no alpha/colorkey problem and therefore no black box.
+        """
+        r = PLAYER_R * 1.10
+        sc = max(0.85, r / 12.0)
+        step = math.sin(self.anim_t) * (3.4 if moving else 0.7)
+
+        outline = (18, 18, 18)
+        boot = (12, 12, 12)
+
+        # Soft field shadow only under the player, not a rectangle.
+        shadow = pygame.Rect(0, 0, int(r * 2.05), int(r * 0.95))
+        shadow.center = (int(gx + 3), int(gy + 5))
+        pygame.draw.ellipse(surf, (0, 0, 0), shadow)
+
+        # Legs and boots behind the body.
+        for side, phase in [(-1, step), (1, -step)]:
+            hip = self._pt(gx, gy, side * 3.1, 6.0, sc)
+            knee = self._pt(gx, gy, side * 3.6 + phase * 0.25, 12.0 + abs(phase) * 0.15, sc)
+            foot = self._pt(gx, gy, side * 4.2 + phase, 17.0, sc)
+            pygame.draw.line(surf, outline, hip, knee, max(3, int(4.2 * sc)))
+            pygame.draw.line(surf, socks, hip, knee, max(2, int(2.8 * sc)))
+            pygame.draw.line(surf, outline, knee, foot, max(3, int(4.0 * sc)))
+            pygame.draw.line(surf, socks, knee, foot, max(2, int(2.6 * sc)))
+            pygame.draw.circle(surf, boot, foot, max(2, int(2.4 * sc)))
+
+        # Arms.
+        for side in (-1, 1):
+            swing = -step * 0.55 * side
+            shoulder = self._pt(gx, gy, side * 8.5, -4.0, sc)
+            hand = self._pt(gx, gy, side * (12.0 + swing), 5.0 - swing, sc)
+            pygame.draw.line(surf, outline, shoulder, hand, max(3, int(4.3 * sc)))
+            pygame.draw.line(surf, _shade(shirt, -0.10), shoulder, hand, max(2, int(2.7 * sc)))
+            pygame.draw.circle(surf, skin, hand, max(2, int(2.4 * sc)))
+
+        # Torso outline and shirt.
+        body_local = [(-7.5, -8.5), (7.5, -8.5), (10.5, 0.5), (7.0, 10.0), (3.0, 13.0), (-3.0, 13.0), (-7.0, 10.0), (-10.5, 0.5)]
+        body = [self._pt(gx, gy, x * 1.08, y * 1.08, sc) for x, y in body_local]
+        pygame.draw.polygon(surf, outline, body)
+        pygame.draw.polygon(surf, shirt, [self._pt(gx, gy, x, y, sc) for x, y in body_local])
+
+        # Kit details: halves or stripes, clipped approximately by drawing smaller panels.
+        if not self.is_keeper and cfg.get('half_half'):
+            shirt2 = cfg.get('shirt2', _shade(shirt, -0.18))
+            right_half = [(0, -8.4), (7.4, -8.4), (10.2, 0.3), (6.8, 9.5), (3.0, 12.4), (0, 12.8)]
+            pygame.draw.polygon(surf, shirt2, [self._pt(gx, gy, x, y, sc) for x, y in right_half])
+        elif not self.is_keeper and cfg.get('stripe'):
+            shirt2 = cfg.get('shirt2', _shade(shirt, -0.18))
+            for x0 in (-5.0, 2.0):
+                stripe = [(x0, -8.0), (x0 + 3.5, -8.0), (x0 + 3.2, 11.0), (x0 - 0.3, 11.0)]
+                pygame.draw.polygon(surf, shirt2, [self._pt(gx, gy, x, y, sc) for x, y in stripe])
+
+        # Shorts.
+        shorts_poly = [(-7.2, 8.0), (7.2, 8.0), (6.4, 14.0), (1.0, 12.5), (-1.0, 12.5), (-6.4, 14.0)]
+        pygame.draw.polygon(surf, outline, [self._pt(gx, gy, x * 1.05, y * 1.05, sc) for x, y in shorts_poly])
+        pygame.draw.polygon(surf, shorts, [self._pt(gx, gy, x, y, sc) for x, y in shorts_poly])
+
+        # Head, hair, and a small facing mark.
+        head = self._pt(gx, gy, 0, -15.0, sc)
+        pygame.draw.circle(surf, outline, head, max(5, int(5.5 * sc)))
+        pygame.draw.circle(surf, skin, head, max(4, int(4.7 * sc)))
+        hair_front = self._pt(gx, gy, 0, -18.5, sc)
+        pygame.draw.circle(surf, hair, hair_front, max(2, int(2.5 * sc)))
+        nose = self._pt(gx, gy, 0, -19.0, sc)
+        pygame.draw.circle(surf, (40, 30, 22), nose, max(1, int(1.0 * sc)))
+
+        # Small highlight and shirt number.
+        pygame.draw.line(surf, _shade(shirt, 0.35), self._pt(gx, gy, -5.0, -5.0, sc), self._pt(gx, gy, 3.5, -6.0, sc), max(1, int(1.3 * sc)))
+        num_col = cfg.get('num_col', (255, 255, 255)) if not self.is_keeper else (255, 255, 255)
+        number = fnt.render(str(self.num), True, num_col)
+        # Keep number small so it sits on the body, not on a square plate.
+        target_w = max(5, int(5.8 * sc)) if self.num < 10 else max(8, int(8.0 * sc))
+        target_h = max(6, int(7.0 * sc))
+        number = pygame.transform.smoothscale(number, (target_w, target_h))
+        nrect = number.get_rect(center=self._pt(gx, gy, 0, 1.8, sc))
+        # Thin outline behind number only, not a black rectangle.
+        for ox, oy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            outline_num = fnt.render(str(self.num), True, (20, 20, 20))
+            outline_num = pygame.transform.smoothscale(outline_num, (target_w, target_h))
+            surf.blit(outline_num, nrect.move(ox, oy))
+        surf.blit(number, nrect)
+
+        return int(r)
+
     def draw(self, surf, ball, fnt):
         shirt, shorts, socks, skin, hair = self._kit()
         cfg = (_KIT_A if self.team == 'A' else _KIT_B) or {}
@@ -194,13 +294,7 @@ class Player:
             self.anim_t += 0.28
 
         gx, gy = w2s(self.wx, self.wy, 0)
-        sprite, offset, R = self._draw_sprite(shirt, shorts, socks, skin, hair, cfg, moving, has_ball, fnt)
-
-        # Rotate the polished sprite so the head points in the movement/facing direction.
-        angle = -math.degrees(math.atan2(self.fdy, self.fdx)) + 90
-        sprite = pygame.transform.rotozoom(sprite, angle, 1.0)
-        rect = sprite.get_rect(center=(gx, gy))
-        surf.blit(sprite, rect)
+        R = self._draw_direct_player(surf, gx, gy, shirt, shorts, socks, skin, hair, cfg, moving, fnt)
 
         # Throw-in animation arms.
         if self.throw_anim > 0:
@@ -214,7 +308,7 @@ class Player:
                 pygame.draw.line(surf, shirt, (ax, ay), (ex, ey), 3)
                 pygame.draw.circle(surf, skin, (int(ex), int(ey)), max(2, int(R * 0.22)))
 
-        # Selection and ball possession rings stay outside the sprite and remain very clear.
+        # Selection and ball possession rings stay outside the player and remain very clear.
         if self.selected:
             pulse = int(2 + 2 * math.sin(pygame.time.get_ticks() * 0.007))
             rc = (0, 255, 100) if self.team == 'A' else (255, 200, 0)
