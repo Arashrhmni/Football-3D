@@ -13,18 +13,20 @@ for _k,_d in TEAMS.items():
     COUNTRY_TEAMS.setdefault(_d['country'],[]).append(_k)
 
 LEAGUE_NAMES = {
-    'Spain':    'La Primera',
-    'England':  'The Premier League',
-    'Germany':  'Die Bundesliga',
-    'Italy':    'Serie A',
-    'Portugal': 'Primeira Liga',
+    'Spain':       'La Primera',
+    'England':     'The Premier League',
+    'Germany':     'Die Bundesliga',
+    'Italy':       'Serie A',
+    'Portugal':    'Primeira Liga',
+    'Netherlands': 'De Eredivisie',
 }
 LEAGUE_ACCENT = {
-    'Spain':    (230,  60,  40),
-    'England':  ( 60, 120, 220),
-    'Germany':  (220, 185,   0),
-    'Italy':    ( 0,  140,  69),
-    'Portugal': (220,  20,  60),
+    'Spain':       (230,  60,  40),
+    'England':     ( 60, 120, 220),
+    'Germany':     (220, 185,   0),
+    'Italy':       (  0, 140,  69),
+    'Portugal':    (220,  20,  60),
+    'Netherlands': (255, 130,   0),
 }
 
 
@@ -117,7 +119,7 @@ class LeagueState:
 
 # ── LEAGUE SETUP SCREEN ───────────────────────────────────────────
 class LeagueSetupScreen:
-    COUNTRY_ORDER=['Spain','England','Germany','Italy','Portugal']
+    COUNTRY_ORDER=['Spain','England','Germany','Italy','Portugal','Netherlands']
     CW,CH=140,108; CGAP=10
 
     def __init__(self,screen,clock):

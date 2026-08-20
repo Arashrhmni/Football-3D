@@ -9,7 +9,7 @@ Modern UEFA Champions League format (2024-25 onwards):
   • Round of 16 → Quarter-finals → Semi-finals → Final (single leg except R16 2-leg)
 
 Human player:
-  • Can pick 1–36 teams manually; rest are randomised from all 5 leagues
+  • Can pick 1–36 teams manually; rest are randomised from all 6 leagues
   • Chooses which team they play AS
   • Simulates all non-human matches; plays their own
 """

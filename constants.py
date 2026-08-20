@@ -1475,6 +1475,263 @@ TEAMS = {
         'num_col': (255, 255, 255),
         'hud_col': (  0, 120, 200),
     },
+
+    # ══════════════════════════════════════════════════════════
+    # NETHERLANDS  (18 clubs)
+    # ══════════════════════════════════════════════════════════
+
+    'godenzonen': {
+        'name':    'De Godenzonen',         # Ajax
+        'country': 'Netherlands',
+        'shirt1':  (235, 235, 235),
+        'shirt2':  (200,  16,  46),
+        'shorts':  (235, 235, 235),
+        'socks':   (200,  16,  46),
+        'gk':      ( 20, 140,  80),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_DARK,
+        'num_col': (200,  16,  46),
+        'hud_col': (200,  16,  46),
+        'stripe':  True,
+        'stripe_cols': [(235,235,235),(200,16,46),(235,235,235)],
+    },
+
+    'boeren': {
+        'name':    'The Farmers FC',        # PSV Eindhoven
+        'country': 'Netherlands',
+        'shirt1':  (196,  22,  28),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (255, 255, 255),
+        'socks':   (196,  22,  28),
+        'gk':      ( 40,  40, 110),
+        'skin':    SKIN_MED, 'hair': HAIR_MED,
+        'num_col': (255, 255, 255),
+        'hud_col': (196,  22,  28),
+    },
+
+    'legioen': {
+        'name':    'Het Legioen',           # Feyenoord
+        'country': 'Netherlands',
+        'shirt1':  (200,  16,  46),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (200,  16,  46),
+        'gk':      (  0, 150,  90),
+        'skin':    SKIN_OLIVE, 'hair': HAIR_BLACK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (200,  16,  46),
+        'half_half': True,
+    },
+
+    'kaasboeren': {
+        'name':    'The Cheese Farmers FC', # AZ Alkmaar
+        'country': 'Netherlands',
+        'shirt1':  (210,  30,  30),
+        'shirt2':  (210,  30,  30),
+        'shorts':  (255, 255, 255),
+        'socks':   (210,  30,  30),
+        'gk':      (255, 180,   0),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_MED,
+        'num_col': (255, 255, 255),
+        'hud_col': (210,  30,  30),
+    },
+
+    'domstedelingen': {
+        'name':    'De Domstedelingen',     # FC Utrecht
+        'country': 'Netherlands',
+        'shirt1':  (200,  16,  46),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   ( 20,  20,  20),
+        'gk':      (255, 210,   0),
+        'skin':    SKIN_MED, 'hair': HAIR_DARK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (200,  16,  46),
+        'half_half': True,
+    },
+
+    'tukkers': {
+        'name':    'De Tukkers',            # FC Twente
+        'country': 'Netherlands',
+        'shirt1':  (196,  22,  28),
+        'shirt2':  (196,  22,  28),
+        'shorts':  (255, 255, 255),
+        'socks':   (196,  22,  28),
+        'gk':      (  0, 120, 180),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_MED,
+        'num_col': (255, 255, 255),
+        'hud_col': (196,  22,  28),
+    },
+
+    'snelheid': {
+        'name':    'De Snelheid FC',        # Vitesse
+        'country': 'Netherlands',
+        'shirt1':  (255, 205,   0),
+        'shirt2':  ( 20,  20,  20),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (255, 205,   0),
+        'gk':      (  0, 140,  90),
+        'skin':    SKIN_OLIVE, 'hair': HAIR_BLACK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (255, 205,   0),
+        'stripe':  True,
+        'stripe_cols': [(255,205,0),(20,20,20),(255,205,0)],
+    },
+
+    'superfriezen': {
+        'name':    'De Superfriezen',       # SC Heerenveen
+        'country': 'Netherlands',
+        'shirt1':  (  0,  70, 160),
+        'shirt2':  (  0,  70, 160),
+        'shorts':  (255, 255, 255),
+        'socks':   (  0,  70, 160),
+        'gk':      (255, 140,   0),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (  0,  70, 160),
+    },
+
+    'noorderlingen': {
+        'name':    'Northern Pride FC',     # FC Groningen
+        'country': 'Netherlands',
+        'shirt1':  (  0, 150,  70),
+        'shirt2':  (255, 255, 255),
+        'shorts':  (255, 255, 255),
+        'socks':   (  0, 150,  70),
+        'gk':      (255, 205,   0),
+        'skin':    SKIN_MED, 'hair': HAIR_MED,
+        'num_col': (  0, 150,  70),
+        'hud_col': (  0, 150,  70),
+        'stripe':  True,
+        'stripe_cols': [(0,150,70),(255,255,255),(0,150,70)],
+    },
+
+    'waalstad': {
+        'name':    'Waalstad FC',           # NEC Nijmegen
+        'country': 'Netherlands',
+        'shirt1':  (200,  16,  46),
+        'shirt2':  ( 20,  20,  20),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (200,  16,  46),
+        'gk':      (  0, 150,  90),
+        'skin':    SKIN_OLIVE, 'hair': HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': (200,  16,  46),
+        'stripe':  True,
+        'stripe_cols': [(200,16,46),(20,20,20),(200,16,46)],
+    },
+
+    'kasteel': {
+        'name':    'Het Kasteel FC',        # Sparta Rotterdam
+        'country': 'Netherlands',
+        'shirt1':  (196,  22,  28),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (196,  22,  28),
+        'gk':      (255, 205,   0),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_MED,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (196,  22,  28),
+        'stripe':  True,
+        'stripe_cols': [(196,22,28),(255,255,255),(196,22,28)],
+    },
+
+    'ijsselvogels': {
+        'name':    'De IJsselvogels',       # Go Ahead Eagles
+        'country': 'Netherlands',
+        'shirt1':  (255, 205,   0),
+        'shirt2':  (200,  16,  46),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (255, 205,   0),
+        'gk':      (  0, 120, 180),
+        'skin':    SKIN_MED, 'hair': HAIR_DARK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (255, 205,   0),
+        'sash':    True,
+    },
+
+    'blauwvingers': {
+        'name':    'De Blauwvingers',       # PEC Zwolle
+        'country': 'Netherlands',
+        'shirt1':  ( 80, 170, 230),
+        'shirt2':  ( 80, 170, 230),
+        'shorts':  ( 20,  20,  20),
+        'socks':   ( 80, 170, 230),
+        'gk':      (255, 205,   0),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_DARK,
+        'num_col': ( 20,  20,  20),
+        'hud_col': ( 80, 170, 230),
+    },
+
+    'leather_city': {
+        'name':    'Leather City FC',       # RKC Waalwijk
+        'country': 'Netherlands',
+        'shirt1':  (255, 205,   0),
+        'shirt2':  (  0,  70, 160),
+        'shorts':  (  0,  70, 160),
+        'socks':   (255, 205,   0),
+        'gk':      (200,  16,  46),
+        'skin':    SKIN_OLIVE, 'hair': HAIR_MED,
+        'num_col': (  0,  70, 160),
+        'hud_col': (255, 205,   0),
+        'stripe':  True,
+        'stripe_cols': [(255,205,0),(0,70,160),(255,205,0)],
+    },
+
+    'fortuinzoekers': {
+        'name':    'The Fortune Seekers FC', # Fortuna Sittard
+        'country': 'Netherlands',
+        'shirt1':  (255, 205,   0),
+        'shirt2':  (  0, 140,  70),
+        'shorts':  (  0, 140,  70),
+        'socks':   (255, 205,   0),
+        'gk':      (200,  16,  46),
+        'skin':    SKIN_MED, 'hair': HAIR_BLACK,
+        'num_col': (  0, 140,  70),
+        'hud_col': (255, 205,   0),
+        'half_half': True,
+    },
+
+    'herculeans': {
+        'name':    'The Herculeans FC',     # Heracles Almelo
+        'country': 'Netherlands',
+        'shirt1':  ( 20,  20,  20),
+        'shirt2':  (255, 255, 255),
+        'shorts':  ( 20,  20,  20),
+        'socks':   ( 20,  20,  20),
+        'gk':      (200,  16,  46),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_DARK,
+        'num_col': (255, 255, 255),
+        'hud_col': (235, 235, 235),
+        'half_half': True,
+    },
+
+    'breda_city': {
+        'name':    'Breda City FC',         # NAC Breda
+        'country': 'Netherlands',
+        'shirt1':  (255, 205,   0),
+        'shirt2':  ( 20,  20,  20),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (255, 205,   0),
+        'gk':      (  0, 120, 180),
+        'skin':    SKIN_MED, 'hair': HAIR_MED,
+        'num_col': ( 20,  20,  20),
+        'hud_col': (255, 205,   0),
+        'stripe':  True,
+        'stripe_cols': [(255,205,0),(20,20,20),(255,205,0)],
+    },
+
+    'palingboeren': {
+        'name':    'De Palingboeren',       # FC Volendam
+        'country': 'Netherlands',
+        'shirt1':  (255, 130,   0),
+        'shirt2':  ( 20,  20,  20),
+        'shorts':  ( 20,  20,  20),
+        'socks':   (255, 130,   0),
+        'gk':      (  0, 150,  90),
+        'skin':    SKIN_LIGHT, 'hair': HAIR_BLACK,
+        'num_col': (255, 255, 255),
+        'hud_col': (255, 130,   0),
+    },
 }
 
 # ── Formation 4-3-3 ──────────────────────────────────────────────
@@ -1540,6 +1797,12 @@ TEAM_STARS = {
     'estrela_amadora':1,'casa_pia':1,'tondela':1,'avs':1,
     # Spain (additional)
     'yellow_submarine':3,'vermells':2,
+    # Netherlands
+    'godenzonen':5,'boeren':5,'legioen':5,'kaasboeren':4,
+    'domstedelingen':3,'tukkers':3,'snelheid':3,'superfriezen':3,
+    'noorderlingen':3,'kasteel':3,'waalstad':2,'ijsselvogels':2,
+    'blauwvingers':2,'leather_city':2,'fortuinzoekers':2,'herculeans':2,
+    'breda_city':1,'palingboeren':1,
 }
 
 def get_stars(key):

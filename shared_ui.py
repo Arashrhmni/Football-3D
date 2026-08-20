@@ -165,6 +165,7 @@ FLAG_DATA = {
     'Germany':  {'cols': [((0,0,0),.333),((221,0,0),.333),((255,206,0),.334)]},
     'Italy':    {'cols': [((0,140,69),.333),((255,255,255),.333),((206,43,55),.334)]},
     'Portugal': {'cols': [((0,102,0),.4),((220,20,60),.6)]},
+    'Netherlands': {'cols': [((174,28,40),.333),((255,255,255),.333),((33,70,139),.334)]},
 }
 
 def draw_flag(surf, rect, country):
@@ -324,8 +325,20 @@ class CountryTab:
         draw_flag(surf, (self.rect.x+10, self.rect.y+16, 40, 26), self.country)
         info = FLAG_DATA.get(self.country,{})
         lc   = {'Spain':(255,196,0),'England':(220,80,80),'Germany':(255,206,0)}.get(self.country, WHITE)
-        lbl  = self.font.render(self.country, True, lc if self.selected else WHITE)
-        surf.blit(lbl, lbl.get_rect(x=self.rect.x+60, centery=self.rect.centery))
+        label_x = self.rect.x + 60
+        # Reserve room for the '▶' arrow unconditionally (not just while
+        # selected) so the label never resizes/jumps when the tab is
+        # clicked; trim long names to fit, same technique as TeamCard.
+        arrow_w = self.font.size('▶')[0]
+        avail   = self.rect.right - 8 - arrow_w - 2 - label_x
+        name = self.country
+        text_col = lc if self.selected else WHITE
+        lbl = self.font.render(name, True, text_col)
+        if lbl.get_width() > avail:
+            while lbl.get_width() > avail and len(name) > 2:
+                name = name[:-1]
+                lbl = self.font.render(name+'…', True, text_col)
+        surf.blit(lbl, lbl.get_rect(x=label_x, centery=self.rect.centery))
         if self.selected:
             arr = self.font.render('▶', True, GOLD)
             surf.blit(arr, arr.get_rect(right=self.rect.right-8, centery=self.rect.centery))

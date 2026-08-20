@@ -11,7 +11,7 @@ from shared_ui import (
 TEAMS_BY_COUNTRY = {}
 for _k, _d in TEAMS.items():
     TEAMS_BY_COUNTRY.setdefault(_d['country'], []).append(_k)
-COUNTRY_ORDER = ['Spain', 'England', 'Germany']
+COUNTRY_ORDER = ['Spain', 'England', 'Germany', 'Italy', 'Portugal', 'Netherlands']
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -200,7 +200,7 @@ class MainMenu:
         draw_football(self.screen, SCR_W//2, 62, 36, self._t)
         self._draw_title()
         for i,r in enumerate(self._rects): self._draw_btn(i,r)
-        ver=self.f_tiny.render("v3.0  ·  76 clubs  ·  5 leagues  ·  Champions League  ·  WASD/arrows in game",True,(42,52,78))
+        ver=self.f_tiny.render("v3.0  ·  114 clubs  ·  6 leagues  ·  Champions League  ·  WASD/arrows in game",True,(42,52,78))
         self.screen.blit(ver,ver.get_rect(centerx=SCR_W//2,y=SCR_H-20))
 
     def _draw_title(self):
