@@ -51,7 +51,8 @@ All entities (`Player`, `Ball`) store position in world space and are
 projected to screen space only at draw time. Physics/AI helpers (`d2`, `n2`,
 `clamp`, `lerpc`) operate in world space and live in `constants.py`.
 
-`constants.py` also holds the full `TEAMS` dict (60+ clubs, fictional names
+`constants.py` also holds the full `TEAMS` dict (114 clubs across 6 leagues —
+England, Spain, Germany, Italy, Portugal, Netherlands — with fictional names
 for portfolio-safe branding — e.g. `the_gunners` = Arsenal, `sky_blues` = Man
 City), `TEAM_STARS`, and `get_stars()` / `ai_params(stars)` which scale AI
 behavior (speed, reaction, pass/shoot/tackle chances) by a club's star rating.
@@ -96,3 +97,11 @@ widgets there rather than duplicating drawing code per module.
 
 Both season systems always simulate non-human fixtures automatically and only
 hand control to `Game` for the human's own matches, then return to the hub.
+
+## Conduct rules (`AGENTS.md`)
+
+`AGENTS.md` has mandatory rules for this repo, most importantly: every code,
+data, or doc change must get a newest-at-the-bottom entry appended to
+`AUDIT.md` (summary, files touched, what/why, and exactly how it was
+verified) in the same session as the change. Read `AGENTS.md` before making
+changes — don't skip logging.

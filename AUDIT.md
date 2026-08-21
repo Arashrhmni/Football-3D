@@ -119,6 +119,28 @@ edit or remove a past entry.
   environment) — the checks above exercise the same real code paths
   directly rather than mocking them.
 
+## 2026-08-21 — Corrected stale club count in CLAUDE.md, added AGENTS.md pointer
+**Agent:** Claude Code (claude-sonnet-5)
+**Files:** CLAUDE.md
+**Change:** Ran `/init` to review `CLAUDE.md` against the current codebase.
+  Found two inaccuracies/gaps and fixed them:
+  - The "Coordinate system" section described `TEAMS` as "60+ clubs" — stale
+    since the Netherlands league was added. Updated to "114 clubs across 6
+    leagues — England, Spain, Germany, Italy, Portugal, Netherlands".
+  - `CLAUDE.md` had no mention of `AGENTS.md`'s mandatory audit-log rule, so
+    a future Claude Code session reading only `CLAUDE.md` (not `AGENTS.md`)
+    could miss it. Added a short "Conduct rules" section at the end pointing
+    to `AGENTS.md` and summarizing the audit-log requirement.
+  No code/behavior changed; documentation only.
+**Verified:** Confirmed the 114 count and the exact 6 country names by
+  grepping `constants.py`'s `TEAMS` dict directly (`'country':` values,
+  deduped: England 20, Germany 18, Italy 20, Netherlands 18, Portugal 18,
+  Spain 20 = 114). Re-read `AGENTS.md` to confirm the new section accurately
+  summarizes its audit-log rule. Not run: `python3 main.py` — doc-only
+  change, nothing executable to exercise. Logging this entry itself was
+  flagged as missing by a `/code-review` run after the fact; this entry
+  closes that gap.
+
 ## 2026-08-20 — Updated README, added .gitignore
 **Agent:** Claude Code (claude-sonnet-5)
 **Files:** README.md, .gitignore (new); staged (not committed) untracking of
